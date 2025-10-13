@@ -16,6 +16,27 @@ This template equips you with a foundational Next.js application integrated with
 
 For detailed instructions on deploying your application, refer to the [deployment section](https://docs.amplify.aws/nextjs/start/quickstart/nextjs-app-router-client-components/#deploy-a-fullstack-app-to-aws) of our documentation.
 
+First create a new secret in AWS Secrets Manager. Enter the following key/value pairs for the new secret:
+| Secret key         | Secret value                                    |
+|--------------------|-------------------------------------------------|
+| token              | PAT with access to the git repo of your project |
+| password           | Password for basic auth on deployments          |
+
+Deploy to AWS via SAM:
+```bash
+sam build
+sam deploy --capabilities CAPABILITY_NAMED_IAM
+```
+
+## Local development
+You first need to deploy a sandbox backend environment, or download the `amplify_outputs.json` file for backend environment. [Reference](https://docs.amplify.aws/nextjs/start/quickstart/nextjs-app-router-client-components/#4-set-up-local-environment).  
+
+To deploy a sandbox backend environment, run `npx ampx sandbox`.
+
+To start the app locally, run `npm run dev`
+
+
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
