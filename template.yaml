@@ -70,6 +70,10 @@ Resources:
       AccessToken: !Sub '{{resolve:secretsmanager:${GitHubAccessTokenSecretArn}:SecretString:token}}'
       IAMServiceRole: !GetAtt AmplifyServiceRole.Arn
       Platform: WEB_COMPUTE
+      BasicAuthConfig:
+        EnableBasicAuth: true
+        Username: !Ref Owner
+        Password: !Sub '{{resolve:secretsmanager:${GitHubAccessTokenSecretArn}:SecretString:password}}'
       BuildSpec: |
         version: 1
         backend:
