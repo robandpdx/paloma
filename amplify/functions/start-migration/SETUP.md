@@ -70,6 +70,22 @@ For local testing with `npx ampx sandbox`:
 
 ### Source Token (GitHub.com)
 
+**Recommended: Fine-grained Personal Access Token** (More secure, better control)
+
+1. Go to https://github.com/settings/tokens?type=beta
+2. Click "Generate new token"
+3. Give it a descriptive name: "Migration Source Token"
+4. Set resource owner to your organization
+5. Select "All repositories" or specific repositories to migrate
+6. Set appropriate permissions:
+   - **Contents**: Read and write
+   - **Metadata**: Read-only
+7. Set an appropriate expiration date (max 1 year)
+8. Click "Generate token"
+9. **Copy the token immediately** - you won't see it again!
+
+**Alternative: Classic Personal Access Token**
+
 1. Go to https://github.com/settings/tokens
 2. Click "Generate new token" → "Generate new token (classic)"
 3. Give it a descriptive name: "Migration Source Token"
@@ -82,8 +98,27 @@ For local testing with `npx ampx sandbox`:
 
 ### Target Token (GitHub Enterprise Cloud)
 
+**Recommended: Fine-grained Personal Access Token** (More secure, better control)
+
 1. Go to your GitHub Enterprise Cloud instance
-2. Navigate to Settings → Developer settings → Personal access tokens
+2. Navigate to Settings → Developer settings → Personal access tokens → Fine-grained tokens
+3. Click "Generate new token"
+4. Give it a descriptive name: "Migration Target Token"
+5. Set resource owner to your target organization
+6. Select "All repositories"
+7. Set appropriate permissions:
+   - **Administration**: Read and write
+   - **Contents**: Read and write
+   - **Metadata**: Read-only
+   - **Workflows**: Read and write
+8. Set an appropriate expiration date (max 1 year)
+9. Click "Generate token"
+10. **Copy the token immediately** - you won't see it again!
+
+**Alternative: Classic Personal Access Token**
+
+1. Go to your GitHub Enterprise Cloud instance
+2. Navigate to Settings → Developer settings → Personal access tokens → Tokens (classic)
 3. Click "Generate new token" → "Generate new token (classic)"
 4. Give it a descriptive name: "Migration Target Token"
 5. Select the following scopes:
