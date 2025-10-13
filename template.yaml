@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS SAM template to create an AWS Amplify App from a GitHub repository.
+
+Parameters:
+  AppName:
+    Type: String
+    Description: The name of the AWS Amplify App.
+  GitHubRepoUrl:
+    Type: String
+    Description: The URL of the GitHub repository (e.g., https://github.com/yourusername/yourrepository.git).
+  GitHubAccessTokenSecretArn:
+    Type: String
+    Description: The ARN of the AWS Secrets Manager secret containing the GitHub Personal Access Token (PAT).
+  TargetOrganization:
+    Type: String
+    Description: The target GitHub organization for the migration.
+  SourceAdminToken:
+    Type: String
+    Description: The admin token for the source organization.
+  TargetAdminToken:
+    Type: String
+    Description: The admin token for the target organization.
+  Owner:
+    Type: String
+    Description: The owner of the AWS resources.
+
+Resources:
+  AmplifyServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-AmplifyServiceRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: amplify.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmplifyBackendDeployFullAccess
+      Policies:
+        - PolicyName: AmplifyLoggingPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: PushLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/amplify/*:log-stream:*"
+              - Sid: CreateLogGroup
+                Effect: Allow
+                Action: logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/amplify/*"
+              - Sid: DescribeLogGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+      Tags:
+        - Key: owner
+          Value: !Ref Owner
+
+  MyAmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: !Ref AppName
+      Repository: !Ref GitHubRepoUrl
+      AccessToken: !Sub '{{resolve:secretsmanager:${GitHubAccessTokenSecretArn}:SecretString:token}}'
+      IAMServiceRole: !GetAtt AmplifyServiceRole.Arn
+      Platform: WEB_COMPUTE
+      BuildSpec: |
+        version: 1
+        backend:
+          phases:
+            build:
+              commands:
+                - npm ci --cache .npm --prefer-offline
+                - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+        frontend:
+          phases:
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: .next
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - .next/cache/**/*
+              - .npm/**/*
+      EnvironmentVariables:
+        - Name: TARGET_ORGANIZATION
+          Value: !Ref TargetOrganization
+        - Name: SOURCE_ADMIN_TOKEN
+          Value: !Ref SourceAdminToken
+        - Name: TARGET_ADMIN_TOKEN
+          Value: !Ref TargetAdminToken
+      Tags:
+        - Key: owner
+          Value: !Ref Owner
+
+  MyAmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt MyAmplifyApp.AppId
+      BranchName: main
+      Stage: PRODUCTION
+      Framework: Next.js - SSR
+      Tags:
+        - Key: owner
+          Value: !Ref Owner
+
+Outputs:
+  AmplifyAppId:
+    Description: The ID of the created Amplify App.
+    Value: !GetAtt MyAmplifyApp.AppId
+  AmplifyAppName:
+    Description: The name of the created Amplify App.
+    Value: !Ref AppName
+  AmplifyAppDefaultDomain:
+    Description: The default domain of the created Amplify App.
+    Value: !GetAtt MyAmplifyApp.DefaultDomain
+  AmplifyServiceRoleArn:
+    Description: The ARN of the Amplify Service Role.
+    Value: !GetAtt AmplifyServiceRole.Arn
