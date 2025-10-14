@@ -279,7 +279,11 @@ export default function App() {
       console.log('Migration started:', result);
 
       if (result.data) {
-        const response = JSON.parse(result.data as string);
+        // Parse the outer JSON wrapper
+        const lambdaResponse = JSON.parse(result.data as string);
+        // Parse the inner body JSON
+        const response = JSON.parse(lambdaResponse.body);
+        
         if (response.success) {
           // Update the repository with migration details
           await client.models.RepositoryMigration.update({
@@ -317,7 +321,11 @@ export default function App() {
       });
 
       if (result.data) {
-        const response = JSON.parse(result.data as string);
+        // Parse the outer JSON wrapper
+        const lambdaResponse = JSON.parse(result.data as string);
+        // Parse the inner body JSON
+        const response = JSON.parse(lambdaResponse.body);
+        
         if (response.success) {
           const state = response.state.toLowerCase();
           
