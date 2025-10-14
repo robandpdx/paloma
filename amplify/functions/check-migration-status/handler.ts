@@ -20,8 +20,12 @@ interface GetMigrationData {
   };
 }
 
-interface MigrationStatusEvent {
+interface MigrationStatusArguments {
   migrationId: string;
+}
+
+interface MigrationStatusEvent {
+  arguments: MigrationStatusArguments;
 }
 
 /**
@@ -85,13 +89,18 @@ async function getMigrationStatus(migrationId: string, token: string): Promise<G
 /**
  * Lambda handler function
  * 
- * Expected event format:
+ * Expected event format from AppSync:
  * {
- *   migrationId: string;  // The repository migration ID
+ *   arguments: {
+ *     migrationId: string;  // The repository migration ID
+ *   }
  * }
  */
 export const handler: Handler = async (event: MigrationStatusEvent, context) => {
   console.log('Checking migration status with event:', JSON.stringify(event, null, 2));
+
+  // Extract arguments from AppSync event
+  const args = event.arguments;
 
   // Validate environment variables
   const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
@@ -101,12 +110,12 @@ export const handler: Handler = async (event: MigrationStatusEvent, context) => 
   }
 
   // Validate event parameters
-  if (!event.migrationId) {
+  if (!args.migrationId) {
     throw new Error('migrationId is required in the event');
   }
 
   try {
-    const migrationStatus = await getMigrationStatus(event.migrationId, TARGET_ADMIN_TOKEN);
+    const migrationStatus = await getMigrationStatus(args.migrationId, TARGET_ADMIN_TOKEN);
 
     console.log('Migration status retrieved:', JSON.stringify(migrationStatus, null, 2));
 

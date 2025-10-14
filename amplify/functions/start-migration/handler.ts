@@ -42,11 +42,15 @@ interface StartRepositoryMigrationData {
   };
 }
 
-interface MigrationEvent {
+interface MigrationArguments {
   sourceRepositoryUrl: string;
   repositoryName: string;
   targetRepoVisibility?: 'private' | 'public' | 'internal';
   continueOnError?: boolean;
+}
+
+interface MigrationEvent {
+  arguments: MigrationArguments;
 }
 
 /**
@@ -216,16 +220,21 @@ async function startRepositoryMigration(
 /**
  * Lambda handler function
  * 
- * Expected event format:
+ * Expected event format from AppSync:
  * {
- *   sourceRepositoryUrl: string;  // e.g., "https://github.com/source-org/repo-name"
- *   repositoryName: string;        // Name for the new repository in target org
- *   targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
- *   continueOnError?: boolean;     // Defaults to true
+ *   arguments: {
+ *     sourceRepositoryUrl: string;  // e.g., "https://github.com/source-org/repo-name"
+ *     repositoryName: string;        // Name for the new repository in target org
+ *     targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
+ *     continueOnError?: boolean;     // Defaults to true
+ *   }
  * }
  */
 export const handler: Handler = async (event: MigrationEvent, context) => {
   console.log('Starting repository migration with event:', JSON.stringify(event, null, 2));
+
+  // Extract arguments from AppSync event
+  const args = event.arguments;
 
   // Validate environment variables
   const TARGET_ORGANIZATION = process.env.TARGET_ORGANIZATION;
@@ -243,10 +252,10 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
   }
 
   // Validate event parameters
-  if (!event.sourceRepositoryUrl) {
+  if (!args.sourceRepositoryUrl) {
     throw new Error('sourceRepositoryUrl is required in the event');
   }
-  if (!event.repositoryName) {
+  if (!args.repositoryName) {
     throw new Error('repositoryName is required in the event');
   }
 
@@ -271,12 +280,12 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     const migrationData = await startRepositoryMigration(
       sourceId,
       ownerId,
-      event.sourceRepositoryUrl,
-      event.repositoryName,
+      args.sourceRepositoryUrl,
+      args.repositoryName,
       SOURCE_ADMIN_TOKEN,
       TARGET_ADMIN_TOKEN,
-      event.targetRepoVisibility || 'private',
-      event.continueOnError !== undefined ? event.continueOnError : true
+      args.targetRepoVisibility || 'private',
+      args.continueOnError !== undefined ? args.continueOnError : true
     );
 
     console.log('Migration started successfully:', JSON.stringify(migrationData, null, 2));
@@ -290,8 +299,8 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
         sourceUrl: migrationData.startRepositoryMigration.repositoryMigration.sourceUrl,
         migrationSourceId: migrationData.startRepositoryMigration.repositoryMigration.migrationSource.id,
         ownerId: ownerId,
-        repositoryName: event.repositoryName,
-        sourceRepositoryUrl: event.sourceRepositoryUrl,
+        repositoryName: args.repositoryName,
+        sourceRepositoryUrl: args.sourceRepositoryUrl,
       }),
     };
   } catch (error) {
