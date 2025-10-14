@@ -17,16 +17,17 @@ type RepositoryMigration = Schema["RepositoryMigration"]["type"];
 
 interface AddRepoModalProps {
   onClose: () => void;
-  onAdd: (url: string, name: string) => void;
+  onAdd: (url: string, name: string, lockSource: boolean) => void;
 }
 
 function AddRepoModal({ onClose, onAdd }: AddRepoModalProps) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [lockSource, setLockSource] = useState(false);
 
   const handleAdd = () => {
     if (url && name) {
-      onAdd(url, name);
+      onAdd(url, name, lockSource);
       onClose();
     }
   };
@@ -81,6 +82,18 @@ function AddRepoModal({ onClose, onAdd }: AddRepoModalProps) {
               onChange={(e) => setName(e.target.value)}
             />
             <div className="form-help">Enter the name for the migrated repository</div>
+          </div>
+          <div className="form-group">
+            <label className="form-checkbox-wrapper">
+              <input
+                type="checkbox"
+                className="form-checkbox"
+                checked={lockSource}
+                onChange={(e) => setLockSource(e.target.checked)}
+              />
+              <span className="form-checkbox-label">Lock source repository</span>
+            </label>
+            <div className="form-help">Lock the source repository during migration to prevent modifications</div>
           </div>
         </div>
         <div className="modal-footer">
@@ -194,6 +207,60 @@ function InfoModal({ repository, onClose }: InfoModalProps) {
   );
 }
 
+interface SettingsModalProps {
+  repository: RepositoryMigration;
+  onClose: () => void;
+  onUpdate: (lockSource: boolean) => void;
+}
+
+function SettingsModal({ repository, onClose, onUpdate }: SettingsModalProps) {
+  const [lockSource, setLockSource] = useState(repository.lockSource || false);
+  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+  const isMigrationStarted = repository.state && repository.state !== 'pending';
+
+  const handleCheckboxChange = async (checked: boolean) => {
+    setLockSource(checked);
+    await onUpdate(checked);
+    setShowSaveConfirmation(true);
+    setTimeout(() => setShowSaveConfirmation(false), 2000);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Repository Settings</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label className="form-checkbox-wrapper">
+              <input
+                type="checkbox"
+                className="form-checkbox"
+                checked={lockSource}
+                onChange={(e) => handleCheckboxChange(e.target.checked)}
+                disabled={isMigrationStarted}
+              />
+              <span className="form-checkbox-label">Lock source repository</span>
+            </label>
+            <div className="form-help">
+              {isMigrationStarted 
+                ? 'This setting cannot be changed after migration has started'
+                : 'Lock the source repository during migration to prevent modifications'}
+            </div>
+          </div>
+          {showSaveConfirmation && (
+            <div className="save-confirmation">
+              ✓ Setting saved
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface FailureModalProps {
   failureReason: string;
   onClose: () => void;
@@ -236,6 +303,7 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [deleteRepo, setDeleteRepo] = useState<RepositoryMigration | null>(null);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
+  const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
   const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
@@ -248,17 +316,25 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const addRepository = async (url: string, name: string) => {
+  const addRepository = async (url: string, name: string, lockSource: boolean) => {
     await client.models.RepositoryMigration.create({
       sourceRepositoryUrl: url,
       repositoryName: name,
       state: 'pending',
+      lockSource,
     });
   };
 
   const deleteRepository = async (id: string) => {
     await client.models.RepositoryMigration.delete({ id });
     setDeleteRepo(null);
+  };
+
+  const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean) => {
+    await client.models.RepositoryMigration.update({
+      id: repo.id,
+      lockSource,
+    });
   };
 
   const startMigration = async (repo: RepositoryMigration) => {
@@ -275,6 +351,7 @@ export default function App() {
         repositoryName: repo.repositoryName,
         targetRepoVisibility: 'private',
         continueOnError: true,
+        lockSource: repo.lockSource || false,
       });
 
       console.log('Migration started:', result);
@@ -464,6 +541,13 @@ export default function App() {
                   {getStatusButtonText(repo.state)}
                 </button>
                 <button 
+                  className="btn btn-default btn-sm btn-icon"
+                  onClick={() => setSettingsRepo(repo)}
+                  title="Repository settings"
+                >
+                  ⚙️
+                </button>
+                <button 
                   className="btn btn-danger btn-sm"
                   onClick={() => setDeleteRepo(repo)}
                 >
@@ -494,6 +578,14 @@ export default function App() {
         <InfoModal
           repository={infoRepo}
           onClose={() => setInfoRepo(null)}
+        />
+      )}
+
+      {settingsRepo && (
+        <SettingsModal
+          repository={settingsRepo}
+          onClose={() => setSettingsRepo(null)}
+          onUpdate={(lockSource) => updateRepositorySettings(settingsRepo, lockSource)}
         />
       )}
 
