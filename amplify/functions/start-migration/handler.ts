@@ -233,33 +233,32 @@ async function startRepositoryMigration(
 export const handler: Handler = async (event: MigrationEvent, context) => {
   console.log('Starting repository migration with event:', JSON.stringify(event, null, 2));
 
-  // Extract arguments from AppSync event
-  const args = event.arguments;
-
-  // Validate environment variables
-  const TARGET_ORGANIZATION = process.env.TARGET_ORGANIZATION;
-  const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
-  const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
-
-  if (!TARGET_ORGANIZATION) {
-    throw new Error('TARGET_ORGANIZATION environment variable is not set');
-  }
-  if (!SOURCE_ADMIN_TOKEN) {
-    throw new Error('SOURCE_ADMIN_TOKEN environment variable is not set');
-  }
-  if (!TARGET_ADMIN_TOKEN) {
-    throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
-  }
-
-  // Validate event parameters
-  if (!args.sourceRepositoryUrl) {
-    throw new Error('sourceRepositoryUrl is required in the event');
-  }
-  if (!args.repositoryName) {
-    throw new Error('repositoryName is required in the event');
-  }
-
   try {
+    // Extract arguments from AppSync event
+    const args = event.arguments;
+
+    // Validate environment variables
+    const TARGET_ORGANIZATION = process.env.TARGET_ORGANIZATION;
+    const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
+    const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
+
+    if (!TARGET_ORGANIZATION) {
+      throw new Error('TARGET_ORGANIZATION environment variable is not set');
+    }
+    if (!SOURCE_ADMIN_TOKEN) {
+      throw new Error('SOURCE_ADMIN_TOKEN environment variable is not set');
+    }
+    if (!TARGET_ADMIN_TOKEN) {
+      throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
+    }
+
+    // Validate event parameters
+    if (!args.sourceRepositoryUrl) {
+      throw new Error('sourceRepositoryUrl is required in the event');
+    }
+    if (!args.repositoryName) {
+      throw new Error('repositoryName is required in the event');
+    }
     // Step 1: Get the ownerId for the target organization
     console.log(`Step 1: Getting ownerId for organization: ${TARGET_ORGANIZATION}`);
     const ownerId = await getOwnerId(TARGET_ORGANIZATION, TARGET_ADMIN_TOKEN);

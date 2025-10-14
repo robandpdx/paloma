@@ -99,22 +99,22 @@ async function getMigrationStatus(migrationId: string, token: string): Promise<G
 export const handler: Handler = async (event: MigrationStatusEvent, context) => {
   console.log('Checking migration status with event:', JSON.stringify(event, null, 2));
 
-  // Extract arguments from AppSync event
-  const args = event.arguments;
-
-  // Validate environment variables
-  const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
-
-  if (!TARGET_ADMIN_TOKEN) {
-    throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
-  }
-
-  // Validate event parameters
-  if (!args.migrationId) {
-    throw new Error('migrationId is required in the event');
-  }
-
   try {
+    // Extract arguments from AppSync event
+    const args = event.arguments;
+
+    // Validate environment variables
+    const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
+
+    if (!TARGET_ADMIN_TOKEN) {
+      throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
+    }
+
+    // Validate event parameters
+    if (!args.migrationId) {
+      throw new Error('migrationId is required in the event');
+    }
+
     const migrationStatus = await getMigrationStatus(args.migrationId, TARGET_ADMIN_TOKEN);
 
     console.log('Migration status retrieved:', JSON.stringify(migrationStatus, null, 2));
