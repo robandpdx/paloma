@@ -55,7 +55,23 @@ body {
   font-size: 24px;
   font-weight: 600;
   color: var(--color-fg-default);
-  margin: 0;
+  margin: 0 0 8px 0;
+}
+
+.target-org-info {
+  font-size: 14px;
+  color: var(--color-fg-muted);
+  margin-top: 4px;
+}
+
+.target-org-label {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.target-org-value {
+  color: var(--color-accent-fg);
+  font-weight: 500;
 }
 
 .repository-list {
@@ -115,40 +131,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.status-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.status-pending {
-  background-color: #8b8b8b;
-}
-
-.status-in-progress {
-  background-color: #0969da;
-  animation: pulse 2s infinite;
-}
-
-.status-completed {
-  background-color: #1a7f37;
-}
-
-.status-failed {
-  background-color: #d1242f;
-  cursor: pointer;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
 }
 
 .repository-actions {
@@ -212,6 +194,49 @@ body {
 .btn-default:hover:not(:disabled) {
   background-color: var(--color-btn-hover-bg);
   border-color: var(--color-btn-hover-border);
+}
+
+.btn-status-in-progress {
+  color: #ffffff;
+  background-color: #0969da;
+  border-color: rgba(31, 35, 40, 0.15);
+  box-shadow: var(--color-btn-shadow);
+  animation: pulse 2s infinite;
+}
+
+.btn-status-in-progress:hover:not(:disabled) {
+  background-color: #0860ca;
+}
+
+.btn-status-completed {
+  color: #ffffff;
+  background-color: var(--color-btn-primary-bg);
+  border-color: rgba(31, 35, 40, 0.15);
+  box-shadow: var(--color-btn-shadow);
+}
+
+.btn-status-completed:hover:not(:disabled) {
+  background-color: var(--color-btn-primary-hover-bg);
+}
+
+.btn-status-failed {
+  color: #ffffff;
+  background-color: var(--color-btn-danger-bg);
+  border-color: rgba(31, 35, 40, 0.15);
+  box-shadow: var(--color-btn-shadow);
+}
+
+.btn-status-failed:hover:not(:disabled) {
+  background-color: var(--color-btn-danger-hover-bg);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .btn-icon {
