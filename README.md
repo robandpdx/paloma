@@ -11,7 +11,36 @@ This template equips you with a foundational Next.js application integrated with
 - **Authentication**: Setup with Amazon Cognito for secure user authentication.
 - **API**: Ready-to-use GraphQL endpoint with AWS AppSync.
 - **Database**: Real-time database powered by Amazon DynamoDB.
-- **GitHub Migration Function**: Lambda function for automating repository migrations using GitHub Enterprise Importer.
+- **GitHub Migration Functions**: Lambda functions for automating repository migrations using GitHub Enterprise Importer.
+- **Migration Management UI**: GitHub-like interface for managing repository migrations with real-time status updates.
+
+## GitHub Repository Migration
+
+This application provides a complete solution for managing GitHub repository migrations using the GitHub Enterprise Importer. It includes:
+
+- **Repository tracking**: Add and manage multiple repositories for migration
+- **Migration initiation**: Start repository migrations with a single click
+- **Status monitoring**: Real-time status updates with visual indicators (blue/green/red dots)
+- **Failure handling**: View detailed error messages when migrations fail
+- **Migration details**: View complete migration information including IDs and configuration
+
+### Functions
+
+1. **start-migration**: Initiates a repository migration from GitHub.com to GitHub Enterprise Cloud
+2. **check-migration-status**: Checks the current status of an in-progress migration
+
+### UI Features
+
+- **Repository List**: View all repositories that have been added for migration
+- **Add Repository**: Modal for adding new repositories with URL validation
+- **Status Indicators**:
+  - 🔵 Blue (pulsing): Migration in progress
+  - 🟢 Green: Migration completed successfully
+  - 🔴 Red: Migration failed (click to view error details)
+  - ⚫ Gray: Pending migration start
+- **Information Modal**: View all migration details for a repository
+- **Delete Confirmation**: Type repository URL to confirm deletion
+- **Auto-polling**: Status updates every 30 seconds after migration starts
 
 ## GitHub Repository Migration
 
@@ -26,12 +55,26 @@ This application includes a Lambda function (`start-migration`) that automates G
 
 2. **Deploy the application** (see deployment section below)
 
-3. **Call the function** from your frontend:
+3. **Use the UI** to manage migrations:
+   - Click "Add Repository" to add a new repository for migration
+   - Click "Start Migration" to begin the migration process
+   - Monitor status with color-coded indicators
+   - Click the info button (ℹ️) to view migration details
+   - Click on red dots to view failure reasons
+   - Use the Delete button to remove repositories from the list
+
+4. **Or call the functions programmatically** from your frontend:
    ```typescript
+   // Start a migration
    const response = await client.queries.startMigration({
      sourceRepositoryUrl: "https://github.com/source-org/repo",
      repositoryName: "migrated-repo",
      targetRepoVisibility: "private"
+   });
+   
+   // Check migration status
+   const status = await client.queries.checkMigrationStatus({
+     migrationId: "MIGRATION_ID_HERE"
    });
    ```
 

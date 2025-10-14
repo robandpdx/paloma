@@ -42,11 +42,15 @@ interface StartRepositoryMigrationData {
   };
 }
 
-interface MigrationEvent {
+interface MigrationArguments {
   sourceRepositoryUrl: string;
   repositoryName: string;
   targetRepoVisibility?: 'private' | 'public' | 'internal';
   continueOnError?: boolean;
+}
+
+interface MigrationEvent {
+  arguments: MigrationArguments;
 }
 
 /**
@@ -216,41 +220,45 @@ async function startRepositoryMigration(
 /**
  * Lambda handler function
  * 
- * Expected event format:
+ * Expected event format from AppSync:
  * {
- *   sourceRepositoryUrl: string;  // e.g., "https://github.com/source-org/repo-name"
- *   repositoryName: string;        // Name for the new repository in target org
- *   targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
- *   continueOnError?: boolean;     // Defaults to true
+ *   arguments: {
+ *     sourceRepositoryUrl: string;  // e.g., "https://github.com/source-org/repo-name"
+ *     repositoryName: string;        // Name for the new repository in target org
+ *     targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
+ *     continueOnError?: boolean;     // Defaults to true
+ *   }
  * }
  */
 export const handler: Handler = async (event: MigrationEvent, context) => {
   console.log('Starting repository migration with event:', JSON.stringify(event, null, 2));
 
-  // Validate environment variables
-  const TARGET_ORGANIZATION = process.env.TARGET_ORGANIZATION;
-  const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
-  const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
-
-  if (!TARGET_ORGANIZATION) {
-    throw new Error('TARGET_ORGANIZATION environment variable is not set');
-  }
-  if (!SOURCE_ADMIN_TOKEN) {
-    throw new Error('SOURCE_ADMIN_TOKEN environment variable is not set');
-  }
-  if (!TARGET_ADMIN_TOKEN) {
-    throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
-  }
-
-  // Validate event parameters
-  if (!event.sourceRepositoryUrl) {
-    throw new Error('sourceRepositoryUrl is required in the event');
-  }
-  if (!event.repositoryName) {
-    throw new Error('repositoryName is required in the event');
-  }
-
   try {
+    // Extract arguments from AppSync event
+    const args = event.arguments;
+
+    // Validate environment variables
+    const TARGET_ORGANIZATION = process.env.TARGET_ORGANIZATION;
+    const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
+    const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
+
+    if (!TARGET_ORGANIZATION) {
+      throw new Error('TARGET_ORGANIZATION environment variable is not set');
+    }
+    if (!SOURCE_ADMIN_TOKEN) {
+      throw new Error('SOURCE_ADMIN_TOKEN environment variable is not set');
+    }
+    if (!TARGET_ADMIN_TOKEN) {
+      throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
+    }
+
+    // Validate event parameters
+    if (!args.sourceRepositoryUrl) {
+      throw new Error('sourceRepositoryUrl is required in the event');
+    }
+    if (!args.repositoryName) {
+      throw new Error('repositoryName is required in the event');
+    }
     // Step 1: Get the ownerId for the target organization
     console.log(`Step 1: Getting ownerId for organization: ${TARGET_ORGANIZATION}`);
     const ownerId = await getOwnerId(TARGET_ORGANIZATION, TARGET_ADMIN_TOKEN);
@@ -271,12 +279,12 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     const migrationData = await startRepositoryMigration(
       sourceId,
       ownerId,
-      event.sourceRepositoryUrl,
-      event.repositoryName,
+      args.sourceRepositoryUrl,
+      args.repositoryName,
       SOURCE_ADMIN_TOKEN,
       TARGET_ADMIN_TOKEN,
-      event.targetRepoVisibility || 'private',
-      event.continueOnError !== undefined ? event.continueOnError : true
+      args.targetRepoVisibility || 'private',
+      args.continueOnError !== undefined ? args.continueOnError : true
     );
 
     console.log('Migration started successfully:', JSON.stringify(migrationData, null, 2));
@@ -288,7 +296,10 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
         message: 'Repository migration started successfully',
         migrationId: migrationData.startRepositoryMigration.repositoryMigration.id,
         sourceUrl: migrationData.startRepositoryMigration.repositoryMigration.sourceUrl,
-        migrationSource: migrationData.startRepositoryMigration.repositoryMigration.migrationSource,
+        migrationSourceId: migrationData.startRepositoryMigration.repositoryMigration.migrationSource.id,
+        ownerId: ownerId,
+        repositoryName: args.repositoryName,
+        sourceRepositoryUrl: args.sourceRepositoryUrl,
       }),
     };
   } catch (error) {
