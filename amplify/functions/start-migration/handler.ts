@@ -288,7 +288,10 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
         message: 'Repository migration started successfully',
         migrationId: migrationData.startRepositoryMigration.repositoryMigration.id,
         sourceUrl: migrationData.startRepositoryMigration.repositoryMigration.sourceUrl,
-        migrationSource: migrationData.startRepositoryMigration.repositoryMigration.migrationSource,
+        migrationSourceId: migrationData.startRepositoryMigration.repositoryMigration.migrationSource.id,
+        ownerId: ownerId,
+        repositoryName: event.repositoryName,
+        sourceRepositoryUrl: event.sourceRepositoryUrl,
       }),
     };
   } catch (error) {

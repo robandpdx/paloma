@@ -1,20 +1,22 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 import { startMigration } from "../functions/start-migration/resource.js";
+import { checkMigrationStatus } from "../functions/check-migration-status/resource.js";
 
-/*== STEP 1 ===============================================================
-The section below creates a Todo database table with a "content" field. Try
-adding a new "isDone" field as a boolean. The authorization rule below
-specifies that any user authenticated via an API key can "create", "read",
-"update", and "delete" any "Todo" records.
-=========================================================================*/
 const schema = a.schema({
-  Todo: a
+  // Repository Migration tracking model
+  RepositoryMigration: a
     .model({
-      content: a.string(),
+      repositoryName: a.string().required(),
+      sourceRepositoryUrl: a.string().required(),
+      destinationOwnerId: a.string(),
+      migrationSourceId: a.string(),
+      repositoryMigrationId: a.string(),
+      state: a.string(), // 'pending', 'in_progress', 'completed', 'failed'
+      failureReason: a.string(),
     })
     .authorization((allow) => [allow.publicApiKey()]),
   
-  // Migration function query
+  // Migration function queries
   startMigration: a
     .query()
     .arguments({
@@ -26,6 +28,15 @@ const schema = a.schema({
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(startMigration)),
+  
+  checkMigrationStatus: a
+    .query()
+    .arguments({
+      migrationId: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(checkMigrationStatus)),
 });
 
 export type Schema = ClientSchema<typeof schema>;
