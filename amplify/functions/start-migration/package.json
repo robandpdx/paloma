@@ -1,0 +1,22 @@
+{
+  "name": "start-migration-function",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lambda function to start GitHub repository migration using GitHub Enterprise Importer",
+  "main": "handler.ts",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "github",
+    "migration",
+    "lambda",
+    "amplify"
+  ],
+  "author": "",
+  "license": "MIT-0",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20"
+  }
+}

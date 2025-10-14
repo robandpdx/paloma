@@ -1,4 +1,5 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { startMigration } from "../functions/start-migration/resource.js";
 
 /*== STEP 1 ===============================================================
 The section below creates a Todo database table with a "content" field. Try
@@ -12,6 +13,19 @@ const schema = a.schema({
       content: a.string(),
     })
     .authorization((allow) => [allow.publicApiKey()]),
+  
+  // Migration function query
+  startMigration: a
+    .query()
+    .arguments({
+      sourceRepositoryUrl: a.string().required(),
+      repositoryName: a.string().required(),
+      targetRepoVisibility: a.string(),
+      continueOnError: a.boolean(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(startMigration)),
 });
 
 export type Schema = ClientSchema<typeof schema>;

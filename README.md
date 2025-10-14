@@ -11,6 +11,33 @@ This template equips you with a foundational Next.js application integrated with
 - **Authentication**: Setup with Amazon Cognito for secure user authentication.
 - **API**: Ready-to-use GraphQL endpoint with AWS AppSync.
 - **Database**: Real-time database powered by Amazon DynamoDB.
+- **GitHub Migration Function**: Lambda function for automating repository migrations using GitHub Enterprise Importer.
+
+## GitHub Repository Migration
+
+This application includes a Lambda function (`start-migration`) that automates GitHub repository migrations using the GitHub Enterprise Importer GraphQL API.
+
+### Quick Start
+
+1. **Set up environment variables** in Amplify Console:
+   - `TARGET_ORGANIZATION` - Target GitHub organization name
+   - `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com
+   - `TARGET_ADMIN_TOKEN` - Personal Access Token for target GHEC
+
+2. **Deploy the application** (see deployment section below)
+
+3. **Call the function** from your frontend:
+   ```typescript
+   const response = await client.queries.startMigration({
+     sourceRepositoryUrl: "https://github.com/source-org/repo",
+     repositoryName: "migrated-repo",
+     targetRepoVisibility: "private"
+   });
+   ```
+
+For detailed documentation, see:
+- [Function README](amplify/functions/start-migration/README.md) - API details and integration examples
+- [Setup Guide](amplify/functions/start-migration/SETUP.md) - Environment configuration and token setup
 
 ## Deploying to AWS
 
