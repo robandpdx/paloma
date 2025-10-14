@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
-    NEXT_PUBLIC_TARGET_ORGANIZATION: process.env.NEXT_PUBLIC_TARGET_ORGANIZATION,
+    NEXT_PUBLIC_TARGET_ORGANIZATION: process.env.TARGET_ORGANIZATION,
   },
 }
 
