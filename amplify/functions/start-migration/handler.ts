@@ -180,7 +180,7 @@ async function startRepositoryMigration(
         continueOnError: $continueOnError,
         accessToken: $accessToken,
         githubPat: $githubPat,
-        targetRepoVisibility: $targetRepoVisibility
+        targetRepoVisibility: $targetRepoVisibility,
         sourceRepositoryUrl: $sourceRepositoryUrl,
         lockSource: $lockSource
       }) {
