@@ -216,7 +216,7 @@ interface SettingsModalProps {
 function SettingsModal({ repository, onClose, onUpdate }: SettingsModalProps) {
   const [lockSource, setLockSource] = useState(repository.lockSource || false);
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
-  const isMigrationStarted = repository.state && repository.state !== 'pending';
+  const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
 
   const handleCheckboxChange = async (checked: boolean) => {
     setLockSource(checked);
