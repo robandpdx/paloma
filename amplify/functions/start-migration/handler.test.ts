@@ -12,11 +12,14 @@ import { handler } from './handler';
  * Mock event for testing
  */
 const createMockEvent = (overrides = {}) => ({
-  sourceRepositoryUrl: 'https://github.com/test-org/test-repo',
-  repositoryName: 'migrated-test-repo',
-  targetRepoVisibility: 'private' as const,
-  continueOnError: true,
-  ...overrides,
+  arguments: {
+    sourceRepositoryUrl: 'https://github.com/test-org/test-repo',
+    repositoryName: 'migrated-test-repo',
+    targetRepoVisibility: 'private' as const,
+    continueOnError: true,
+    lockSource: false,
+    ...overrides,
+  }
 });
 
 describe('Start Migration Handler', () => {
@@ -108,20 +111,30 @@ describe('Start Migration Handler', () => {
     test('should accept valid event with all parameters', () => {
       const event = createMockEvent();
       
-      expect(event.sourceRepositoryUrl).toBeDefined();
-      expect(event.repositoryName).toBeDefined();
-      expect(event.targetRepoVisibility).toBe('private');
-      expect(event.continueOnError).toBe(true);
+      expect(event.arguments.sourceRepositoryUrl).toBeDefined();
+      expect(event.arguments.repositoryName).toBeDefined();
+      expect(event.arguments.targetRepoVisibility).toBe('private');
+      expect(event.arguments.continueOnError).toBe(true);
+      expect(event.arguments.lockSource).toBe(false);
+    });
+
+    test('should accept valid event with lockSource=true', () => {
+      const event = createMockEvent({ lockSource: true });
+      
+      expect(event.arguments.sourceRepositoryUrl).toBeDefined();
+      expect(event.arguments.repositoryName).toBeDefined();
+      expect(event.arguments.lockSource).toBe(true);
     });
 
     test('should accept valid event with optional parameters omitted', () => {
       const event = createMockEvent({
         targetRepoVisibility: undefined,
         continueOnError: undefined,
+        lockSource: undefined,
       });
       
-      expect(event.sourceRepositoryUrl).toBeDefined();
-      expect(event.repositoryName).toBeDefined();
+      expect(event.arguments.sourceRepositoryUrl).toBeDefined();
+      expect(event.arguments.repositoryName).toBeDefined();
     });
   });
 });

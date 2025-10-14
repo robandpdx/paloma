@@ -232,6 +232,7 @@ async function startRepositoryMigration(
  *     repositoryName: string;        // Name for the new repository in target org
  *     targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
  *     continueOnError?: boolean;     // Defaults to true
+ *     lockSource?: boolean;          // Lock the source repository during migration
  *   }
  * }
  */
