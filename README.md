@@ -50,7 +50,7 @@ This application includes a Lambda function (`start-migration`) that automates G
 ### Quick Start
 
 1. **Set up environment variables** in Amplify Console:
-   - `TARGET_ORGANIZATION` - Target GitHub organization name (also displayed in the UI via `NEXT_PUBLIC_TARGET_ORGANIZATION`)
+   - `TARGET_ORGANIZATION` - Target GitHub organization name (displayed in the UI)
    - `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com
    - `TARGET_ADMIN_TOKEN` - Personal Access Token for target GHEC
 
@@ -110,10 +110,12 @@ To start the app locally, run `npm run dev`
 
 For local development, create a `.env.local` file in the root directory with the following variables:
 ```
-NEXT_PUBLIC_TARGET_ORGANIZATION=your-target-organization
+TARGET_ORGANIZATION=your-target-organization
 ```
 
-For production deployment in Amplify Console, set the `NEXT_PUBLIC_TARGET_ORGANIZATION` environment variable in the app settings to display the target organization in the UI.
+For production deployment in Amplify Console, set the `TARGET_ORGANIZATION` environment variable in the app settings. The `next.config.js` file is configured to embed this environment variable at build time, ensuring it's available in the deployed static app.
+
+**Note**: The `TARGET_ORGANIZATION` environment variable is embedded into the JavaScript bundle during the build process. After deploying or changing this environment variable in Amplify Console, you must trigger a new build for the changes to take effect.
 
 
 
