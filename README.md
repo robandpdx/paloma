@@ -113,7 +113,9 @@ For local development, create a `.env.local` file in the root directory with the
 NEXT_PUBLIC_TARGET_ORGANIZATION=your-target-organization
 ```
 
-For production deployment in Amplify Console, set the `NEXT_PUBLIC_TARGET_ORGANIZATION` environment variable in the app settings to display the target organization in the UI.
+For production deployment in Amplify Console, set the `NEXT_PUBLIC_TARGET_ORGANIZATION` environment variable in the app settings. The `next.config.js` file is configured to embed this environment variable at build time, ensuring it's available in the deployed static app.
+
+**Note**: Environment variables with the `NEXT_PUBLIC_` prefix are embedded into the JavaScript bundle during the build process. After deploying or changing this environment variable in Amplify Console, you must trigger a new build for the changes to take effect.
 
 
 
