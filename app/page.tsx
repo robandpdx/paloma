@@ -541,17 +541,17 @@ export default function App() {
                   {getStatusButtonText(repo.state)}
                 </button>
                 <button 
+                  className="btn btn-danger btn-sm"
+                  onClick={() => setDeleteRepo(repo)}
+                >
+                  Delete
+                </button>
+                <button 
                   className="btn btn-default btn-sm btn-icon"
                   onClick={() => setSettingsRepo(repo)}
                   title="Repository settings"
                 >
                   ⚙️
-                </button>
-                <button 
-                  className="btn btn-danger btn-sm"
-                  onClick={() => setDeleteRepo(repo)}
-                >
-                  Delete
                 </button>
               </div>
             </div>
