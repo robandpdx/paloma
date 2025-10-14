@@ -14,6 +14,7 @@ Created `RepositoryMigration` model with:
 - `repositoryMigrationId` - Unique migration ID from GitHub API
 - `state` - Migration state (pending, in_progress, completed, failed)
 - `failureReason` - Error message if migration fails
+- `lockSource` - Boolean flag to lock source repository during migration
 
 ### 2. Backend Functions
 
@@ -25,11 +26,13 @@ New Lambda function that:
 - Includes comprehensive documentation and usage examples
 
 #### Updated start-migration Function
-Enhanced to return:
-- Migration ID for tracking
-- Migration source ID
-- Destination owner ID
-- Repository name and source URL
+Enhanced to:
+- Accept `lockSource` parameter
+- Pass `lockSource` to GitHub GraphQL API mutation
+- Return migration ID for tracking
+- Return migration source ID
+- Return destination owner ID
+- Return repository name and source URL
 
 ### 3. Frontend UI (app/page.tsx)
 
@@ -44,6 +47,7 @@ Enhanced to return:
 #### Add Repository Modal
 - Input field for source repository URL
 - Auto-populated repository name
+- "Lock source repository" checkbox option
 - Form validation
 - GitHub-like modal design
 
@@ -76,15 +80,27 @@ Enhanced to return:
 - Prevents accidental deletions
 - Removes repository from database
 
+#### Repository Settings Modal
+- Settings gear icon (⚙️) next to delete button
+- Toggle "Lock source repository" option
+- Auto-save on checkbox change with visual confirmation
+- Shows save confirmation for 2 seconds
+- Checkbox disabled after migration starts (read-only mode)
+- No save/cancel buttons needed (immediate save)
+- Closable by clicking outside or X button
+
 ### 4. Styling (app/github.css)
 - GitHub-like color palette and design system
 - Responsive layout
 - Smooth animations and transitions
 - Professional modal overlays
 - Form input styling matching GitHub
-- Button styles (primary, danger, default)
+- Checkbox styling with custom appearance
+- Button styles (primary, danger, default, icon)
 - Status indicator animations
+- Save confirmation animation with fade-in effect
 - Empty state styling
+- Settings modal sizing
 
 ### 5. Documentation
 

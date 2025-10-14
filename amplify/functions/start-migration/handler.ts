@@ -47,6 +47,7 @@ interface MigrationArguments {
   repositoryName: string;
   targetRepoVisibility?: 'private' | 'public' | 'internal';
   continueOnError?: boolean;
+  lockSource?: boolean;
 }
 
 interface MigrationEvent {
@@ -157,7 +158,8 @@ async function startRepositoryMigration(
   sourceToken: string,
   targetToken: string,
   targetRepoVisibility: string = 'private',
-  continueOnError: boolean = true
+  continueOnError: boolean = true,
+  lockSource?: boolean
 ): Promise<StartRepositoryMigrationData> {
   const mutation = `
     mutation startRepositoryMigration(
@@ -168,7 +170,8 @@ async function startRepositoryMigration(
       $continueOnError: Boolean!,
       $accessToken: String!,
       $githubPat: String!,
-      $targetRepoVisibility: String!
+      $targetRepoVisibility: String!,
+      $lockSource: Boolean
     ) {
       startRepositoryMigration(input: {
         sourceId: $sourceId,
@@ -177,8 +180,9 @@ async function startRepositoryMigration(
         continueOnError: $continueOnError,
         accessToken: $accessToken,
         githubPat: $githubPat,
-        targetRepoVisibility: $targetRepoVisibility
+        targetRepoVisibility: $targetRepoVisibility,
         sourceRepositoryUrl: $sourceRepositoryUrl,
+        lockSource: $lockSource
       }) {
         repositoryMigration {
           id
@@ -202,6 +206,7 @@ async function startRepositoryMigration(
     accessToken: sourceToken,
     githubPat: targetToken,
     targetRepoVisibility,
+    lockSource,
   };
 
   const response = await makeGraphQLRequest<StartRepositoryMigrationData>(mutation, variables, targetToken);
@@ -227,6 +232,7 @@ async function startRepositoryMigration(
  *     repositoryName: string;        // Name for the new repository in target org
  *     targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
  *     continueOnError?: boolean;     // Defaults to true
+ *     lockSource?: boolean;          // Lock the source repository during migration
  *   }
  * }
  */
@@ -284,7 +290,8 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
       SOURCE_ADMIN_TOKEN,
       TARGET_ADMIN_TOKEN,
       args.targetRepoVisibility || 'private',
-      args.continueOnError !== undefined ? args.continueOnError : true
+      args.continueOnError !== undefined ? args.continueOnError : true,
+      args.lockSource
     );
 
     console.log('Migration started successfully:', JSON.stringify(migrationData, null, 2));

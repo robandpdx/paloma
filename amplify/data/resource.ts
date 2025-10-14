@@ -13,6 +13,7 @@ const schema = a.schema({
       repositoryMigrationId: a.string(),
       state: a.string(), // 'pending', 'in_progress', 'completed', 'failed'
       failureReason: a.string(),
+      lockSource: a.boolean(), // Whether to lock the source repository during migration
     })
     .authorization((allow) => [allow.publicApiKey()]),
   
@@ -24,6 +25,7 @@ const schema = a.schema({
       repositoryName: a.string().required(),
       targetRepoVisibility: a.string(),
       continueOnError: a.boolean(),
+      lockSource: a.boolean(),
     })
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
