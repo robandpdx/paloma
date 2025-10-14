@@ -238,6 +238,7 @@ export default function App() {
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
   const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
+  const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
 
   useEffect(() => {
     const subscription = client.models.RepositoryMigration.observeQuery().subscribe({
@@ -378,29 +379,52 @@ export default function App() {
     return () => clearInterval(interval);
   }, [pollingRepos, repositories, checkMigrationStatus]);
 
-  const getStatusClass = (state?: string | null) => {
+  const getStatusButtonClass = (state?: string | null) => {
     switch (state) {
       case 'in_progress':
-        return 'status-in-progress';
+        return 'btn-status-in-progress';
       case 'completed':
-        return 'status-completed';
+        return 'btn-status-completed';
       case 'failed':
-        return 'status-failed';
+        return 'btn-status-failed';
       default:
-        return 'status-pending';
+        return 'btn-primary';
     }
   };
 
-  const handleStatusClick = (repo: RepositoryMigration) => {
-    if (repo.state === 'failed' && repo.failureReason) {
-      setFailureInfo(repo.failureReason);
+  const getStatusButtonText = (state?: string | null) => {
+    switch (state) {
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      default:
+        return 'Start Migration';
+    }
+  };
+
+  const handleStatusButtonClick = (repo: RepositoryMigration) => {
+    // If pending, start the migration
+    if (!repo.state || repo.state === 'pending') {
+      startMigration(repo);
+    } else {
+      // Otherwise, show the info modal
+      setInfoRepo(repo);
     }
   };
 
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1 className="app-title">GitHub Repository Migration</h1>
+        <div>
+          <h1 className="app-title">GitHub Repository Migration</h1>
+          <div className="target-org-info">
+            <span className="target-org-label">Target Organization:</span>
+            <span className="target-org-value">{targetOrganization}</span>
+          </div>
+        </div>
         <button className="btn btn-default sign-out-btn" onClick={signOut}>
           Sign out
         </button>
@@ -432,26 +456,12 @@ export default function App() {
                 <div className="repository-name">{repo.repositoryName}</div>
                 <div className="repository-url">{repo.sourceRepositoryUrl}</div>
               </div>
-              <div 
-                className={`status-indicator ${getStatusClass(repo.state)}`}
-                onClick={() => handleStatusClick(repo)}
-                title={repo.state || 'pending'}
-              />
               <div className="repository-actions">
-                {(!repo.state || repo.state === 'pending') && (
-                  <button 
-                    className="btn btn-primary btn-sm"
-                    onClick={() => startMigration(repo)}
-                  >
-                    Start Migration
-                  </button>
-                )}
                 <button 
-                  className="btn btn-default btn-sm btn-icon"
-                  onClick={() => setInfoRepo(repo)}
-                  title="View details"
+                  className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
+                  onClick={() => handleStatusButtonClick(repo)}
                 >
-                  ℹ️
+                  {getStatusButtonText(repo.state)}
                 </button>
                 <button 
                   className="btn btn-danger btn-sm"
