@@ -24,7 +24,7 @@ When adding a new repository via the "Add Repository" modal:
 
 After a repository is added, users can manage the lock source setting:
 
-**Location**: Repository row → Settings gear icon (⚙️) between status button and delete button
+**Location**: Repository row → Settings gear icon (⚙️) to the right of delete button
 
 **Settings Modal Components**:
 - **Title**: "Repository Settings"

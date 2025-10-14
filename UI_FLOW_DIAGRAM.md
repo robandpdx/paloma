@@ -36,13 +36,13 @@
 │                                                                  │
 │  my-repo-1                                                       │
 │  https://github.com/owner/my-repo-1                              │
-│                  [ Start Migration ]  [ ⚙️ ]  [ Delete ]         │
-│                                         ↑                        │
-│                                    NEW: Settings                 │
+│                  [ Start Migration ]  [ Delete ]  [ ⚙️ ]         │
+│                                                        ↑          │
+│                                                   NEW: Settings   │
 ├──────────────────────────────────────────────────────────────────┤
 │  my-repo-2                                                       │
 │  https://github.com/owner/my-repo-2                              │
-│                  [ In Progress... ]  [ ⚙️ ]  [ Delete ]          │
+│                  [ In Progress... ]  [ Delete ]  [ ⚙️ ]          │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -153,9 +153,9 @@ Before:
 [ Status Button ]  [ Delete ]
 
 After:
-[ Status Button ]  [ ⚙️ Settings ]  [ Delete ]
-                      ↑
-                   New icon
+[ Status Button ]  [ Delete ]  [ ⚙️ Settings ]
+                                  ↑
+                               New icon
 ```
 
 ## CSS Classes Added

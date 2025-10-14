@@ -50,9 +50,9 @@ Repository List Card:
 │                                                             │
 │ my-awesome-repo                                             │
 │ https://github.com/myorg/my-awesome-repo                    │
-│           [Start Migration]  [⚙️]  [Delete]                 │
-│                                ↑                            │
-│                            NEW ICON                         │
+│           [Start Migration]  [Delete]  [⚙️]                 │
+│                                          ↑                  │
+│                                      NEW ICON               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -282,7 +282,7 @@ To see this UI in action:
 
 ### After This PR
 ```
-[Status Button] [⚙️] [Delete]
+[Status Button] [Delete] [⚙️]
 ```
 
 Add Repository Modal:
