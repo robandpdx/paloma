@@ -34,6 +34,11 @@ This application provides a complete solution for managing GitHub repository mig
 
 - **Repository List**: View all repositories that have been added for migration
 - **Add Repository**: Modal for adding new repositories with URL validation
+  - Option to lock source repository during migration
+- **Repository Settings**: Settings gear icon (⚙️) for each repository
+  - Toggle "Lock source repository" option before migration starts
+  - Auto-save with visual confirmation
+  - Read-only view after migration begins
 - **Status Button**: Combined status indicator and action button that:
   - Shows "Start Migration" (green) for pending repositories - click to start migration
   - Shows "In Progress" (blue, pulsing) during migration - click to view details
@@ -59,7 +64,9 @@ This application includes a Lambda function (`start-migration`) that automates G
 3. **Use the UI** to manage migrations:
    - The target organization is displayed below the page title
    - Click "Add Repository" to add a new repository for migration
+   - Check "Lock source repository" option to prevent modifications during migration
    - Click the "Start Migration" button (green) to begin the migration process
+   - Click the settings gear icon (⚙️) to manage repository settings before migration
    - Monitor status via the status button that changes color and text based on state
    - Click status buttons (except "Start Migration") to view migration details
    - Use the Delete button to remove repositories from the list
