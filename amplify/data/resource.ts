@@ -1,6 +1,7 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 import { startMigration } from "../functions/start-migration/resource.js";
 import { checkMigrationStatus } from "../functions/check-migration-status/resource.js";
+import { getOwnerId } from "../functions/get-owner-id/resource.js";
 import { deleteTargetRepo } from "../functions/delete-target-repo/resource.js";
 import { unlockSourceRepo } from "../functions/unlock-source-repo/resource.js";
 
@@ -28,6 +29,7 @@ const schema = a.schema({
       targetRepoVisibility: a.string(),
       continueOnError: a.boolean(),
       lockSource: a.boolean(),
+      destinationOwnerId: a.string(), // Optional: reuse if already known
     })
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
@@ -42,6 +44,11 @@ const schema = a.schema({
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(checkMigrationStatus)),
   
+  getOwnerId: a
+    .query()
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(getOwnerId)),
   deleteTargetRepo: a
     .query()
     .arguments({

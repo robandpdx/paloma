@@ -126,6 +126,14 @@ describe('Start Migration Handler', () => {
       expect(event.arguments.lockSource).toBe(true);
     });
 
+    test('should accept valid event with destinationOwnerId provided', () => {
+      const event = createMockEvent({ destinationOwnerId: 'MDEyOk9yZ2FuaXphdGlvbjU2MTA=' });
+      
+      expect(event.arguments.sourceRepositoryUrl).toBeDefined();
+      expect(event.arguments.repositoryName).toBeDefined();
+      expect(event.arguments.destinationOwnerId).toBe('MDEyOk9yZ2FuaXphdGlvbjU2MTA=');
+    });
+
     test('should accept valid event with optional parameters omitted', () => {
       const event = createMockEvent({
         targetRepoVisibility: undefined,
