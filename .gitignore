@@ -43,3 +43,4 @@ amplifyconfiguration*
 # sam
 .aws-sam
 samconfig.toml
+amplify_outputs.json
