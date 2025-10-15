@@ -12,6 +12,7 @@ import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { Stack } from 'aws-cdk-lib';
 import { Duration } from 'aws-cdk-lib';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { CfnFunction } from 'aws-cdk-lib/aws-lambda';
 
 const backend = defineBackend({
   auth,
@@ -42,9 +43,21 @@ lambdaFunction.addToRolePolicy(
   })
 );
 
-// Set the GraphQL endpoint as an environment variable directly on the Lambda function
-// This avoids circular dependency by setting it on the CDK construct rather than through backend.addEnvironment
-lambdaFunction.addEnvironment('AMPLIFY_DATA_ENDPOINT', apiEndpoint);
+// Set the GraphQL endpoint as an environment variable using the CloudFormation-level construct
+// This avoids circular dependency by setting it directly on the CFN resource
+const cfnFunction = lambdaFunction.node.defaultChild as CfnFunction;
+if (cfnFunction.environment) {
+  cfnFunction.environment.variables = {
+    ...cfnFunction.environment.variables,
+    AMPLIFY_DATA_ENDPOINT: apiEndpoint,
+  };
+} else {
+  cfnFunction.environment = {
+    variables: {
+      AMPLIFY_DATA_ENDPOINT: apiEndpoint,
+    },
+  };
+}
 
 // Add the EventBridge schedule for polling
 const stack = Stack.of(lambdaFunction);
