@@ -288,8 +288,8 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
                 <p>Are you sure you want to reset this repository?</p>
                 <p className="form-help">This will:</p>
                 <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
-                  <li>Delete the target repository if it exists</li>
-                  {repository.lockSource && <li>Unlock the source repository</li>}
+                  {repository.state !== 'pending' && <li>Delete the target repository if it exists</li>}
+                  {repository.lockSource && repository.migrationSourceId && <li>Unlock the source repository</li>}
                   <li>Clear migration IDs</li>
                   <li>Reset the migration state</li>
                 </ul>
@@ -389,8 +389,8 @@ export default function App() {
 
   const resetRepository = async (repo: RepositoryMigration) => {
     try {
-      // Delete target repository if migration was started
-      if (repo.repositoryName) {
+      // Delete target repository if migration was actually started (not in pending state)
+      if (repo.repositoryName && repo.state !== 'pending') {
         console.log('Deleting target repository:', repo.repositoryName);
         const deleteResult = await client.queries.deleteTargetRepo({
           repositoryName: repo.repositoryName,
@@ -398,7 +398,7 @@ export default function App() {
         console.log('Delete result:', deleteResult);
       }
 
-      // Unlock source repository if it was locked
+      // Unlock source repository if it was locked and migration was started
       if (repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
         console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
         const unlockResult = await client.queries.unlockSourceRepo({

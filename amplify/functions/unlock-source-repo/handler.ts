@@ -92,12 +92,12 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
       throw new Error('repositoryName is required in the event');
     }
 
-    // Parse the repository URL to get the organization
-    const { owner } = parseRepoUrl(args.sourceRepositoryUrl);
+    // Parse the repository URL to get the organization and source repository name
+    const { owner, repo: sourceRepoName } = parseRepoUrl(args.sourceRepositoryUrl);
 
     // Unlock the repository using the migration API
-    console.log(`Unlocking repository: ${owner}/${args.repositoryName} from migration ${args.migrationSourceId}`);
-    await unlockRepository(owner, args.migrationSourceId, args.repositoryName, SOURCE_ADMIN_TOKEN);
+    console.log(`Unlocking repository: ${owner}/${sourceRepoName} from migration ${args.migrationSourceId}`);
+    await unlockRepository(owner, args.migrationSourceId, sourceRepoName, SOURCE_ADMIN_TOKEN);
 
     console.log('Repository unlocked successfully');
 
@@ -108,7 +108,7 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
         message: 'Repository unlocked successfully',
         sourceRepositoryUrl: args.sourceRepositoryUrl,
         organization: owner,
-        repositoryName: args.repositoryName,
+        repositoryName: sourceRepoName,
         migrationSourceId: args.migrationSourceId,
       }),
     };
