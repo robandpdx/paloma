@@ -524,14 +524,6 @@ export default function App() {
 
   const startMigration = async (repo: RepositoryMigration) => {
     try {
-      console.log('Starting migration for repository:', {
-        id: repo.id,
-        name: repo.repositoryName,
-        visibility: repo.repositoryVisibility,
-        visibilityType: typeof repo.repositoryVisibility,
-        lockSource: repo.lockSource
-      });
-
       // Update state to in_progress
       await client.models.RepositoryMigration.update({
         id: repo.id,
