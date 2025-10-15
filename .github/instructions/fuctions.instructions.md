@@ -1,3 +1,7 @@
+---
+applyTo: "amplify/**/*,app/**/*"
+---
+
 Environment variables and secrets
 Amplify Functions support setting environment variables and secrets on the environment property of defineFunction.
 
