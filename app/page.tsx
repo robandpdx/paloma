@@ -319,6 +319,16 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Resume polling for repositories that are in progress on page load/refresh
+  useEffect(() => {
+    repositories.forEach(repo => {
+      // Start polling for repositories that are in_progress and have a repositoryMigrationId
+      if (repo.state === 'in_progress' && repo.repositoryMigrationId && !pollingRepos.has(repo.id)) {
+        startPolling(repo.id, repo.repositoryMigrationId);
+      }
+    });
+  }, [repositories, pollingRepos]);
+
   const addRepository = async (url: string, name: string, lockSource: boolean) => {
     await client.models.RepositoryMigration.create({
       sourceRepositoryUrl: url,
