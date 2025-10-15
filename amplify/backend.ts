@@ -42,8 +42,9 @@ lambdaFunction.addToRolePolicy(
   })
 );
 
-// Set the GraphQL endpoint as an environment variable
-backend.pollMigrationStatus.addEnvironment('AMPLIFY_DATA_ENDPOINT', apiEndpoint);
+// Set the GraphQL endpoint as an environment variable directly on the Lambda function
+// This avoids circular dependency by setting it on the CDK construct rather than through backend.addEnvironment
+lambdaFunction.addEnvironment('AMPLIFY_DATA_ENDPOINT', apiEndpoint);
 
 // Add the EventBridge schedule for polling
 const stack = Stack.of(lambdaFunction);
