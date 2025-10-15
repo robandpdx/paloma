@@ -478,3 +478,59 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Bulk operations styles */
+.repository-list-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.repository-table-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--color-canvas-subtle);
+  border-bottom: 1px solid var(--color-border-muted);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-fg-muted);
+  text-transform: uppercase;
+}
+
+.repository-checkbox-cell {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.repository-checkbox-cell input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.repository-info-header {
+  flex: 1;
+  min-width: 0;
+}
+
+.repository-actions-header {
+  width: 280px;
+  text-align: right;
+  padding-right: 8px;
+}
+
+.repository-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border-muted);
+  gap: 16px;
+}
+
+input[type="file"] + label {
+  cursor: pointer;
+}
