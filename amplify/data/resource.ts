@@ -22,7 +22,6 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.publicApiKey(),
       allow.authenticated().to(['read', 'create', 'update', 'delete']),
-      allow.custom('iam').to(['read', 'update']),
     ]),
   
   // Migration function queries
@@ -83,6 +82,10 @@ export const data = defineData({
     defaultAuthorizationMode: "apiKey",
     apiKeyAuthorizationMode: {
       expiresInDays: 30,
+    },
+    iamAuthorizationMode: {
+      authenticationType: "identityPool",
+      // Allows IAM-authenticated requests (e.g., from Lambda functions)
     },
   },
 });
