@@ -323,11 +323,11 @@ export default function App() {
   useEffect(() => {
     repositories.forEach(repo => {
       // Start polling for repositories that are in_progress and have a repositoryMigrationId
-      if (repo.state === 'in_progress' && repo.repositoryMigrationId && !pollingRepos.has(repo.id)) {
+      if (repo.state === 'in_progress' && repo.repositoryMigrationId) {
         startPolling(repo.id, repo.repositoryMigrationId);
       }
     });
-  }, [repositories, pollingRepos]);
+  }, [repositories, startPolling]);
 
   const addRepository = async (url: string, name: string, lockSource: boolean) => {
     await client.models.RepositoryMigration.create({
@@ -450,9 +450,9 @@ export default function App() {
     }
   }, []);
 
-  const startPolling = (repoId: string, migrationId: string) => {
+  const startPolling = useCallback((repoId: string, migrationId: string) => {
     setPollingRepos(prev => new Set(prev).add(repoId));
-  };
+  }, []);
 
   // Polling effect
   useEffect(() => {
