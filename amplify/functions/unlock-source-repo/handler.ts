@@ -5,6 +5,7 @@ const GITHUB_API_BASE = 'https://api.github.com';
 
 interface UnlockSourceRepoArguments {
   sourceRepositoryUrl: string;
+  migrationSourceId: string;
   repositoryName: string;
 }
 
@@ -122,9 +123,13 @@ async function unlockRepository(
  * {
  *   arguments: {
  *     sourceRepositoryUrl: string;  // URL of the source repository to unlock
+ *     migrationSourceId: string;    // The migration source ID (for reference, not used in unlock)
  *     repositoryName: string;        // The repository name
  *   }
  * }
+ * 
+ * Note: migrationSourceId is kept for compatibility with start-migration function,
+ * but the unlock operation queries the REST API to find the correct numeric migration ID.
  */
 export const handler: Handler = async (event: UnlockSourceRepoEvent, context) => {
   console.log('Unlocking source repository with event:', JSON.stringify(event, null, 2));
@@ -151,7 +156,8 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
     // Parse the repository URL to get the organization
     const { owner } = parseRepoUrl(args.sourceRepositoryUrl);
 
-    // Get the migration ID by querying all migrations and finding the one with this repo
+    // Get the numeric migration ID by querying all migrations and finding the one with this repo
+    // Note: We don't use migrationSourceId here because the unlock API needs the numeric migration ID
     console.log(`Getting migration ID for repository: ${owner}/${args.repositoryName}`);
     const migrationId = await getMigrationId(owner, args.repositoryName, SOURCE_ADMIN_TOKEN);
 
@@ -170,6 +176,7 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
         organization: owner,
         repositoryName: args.repositoryName,
         migrationId: migrationId,
+        migrationSourceId: args.migrationSourceId, // Return for reference
       }),
     };
   } catch (error) {

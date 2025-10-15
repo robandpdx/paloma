@@ -103,8 +103,9 @@ After a reset:
   - SOURCE_ADMIN_TOKEN
 - **Required Arguments**:
   - sourceRepositoryUrl - To extract the organization
+  - migrationSourceId - The migration source ID (kept for compatibility with start-migration)
   - repositoryName - The repository name
-- **Note**: The function automatically finds the correct migration ID by querying all migrations for the organization
+- **Note**: The function queries the migrations API to find the correct numeric migration ID (different from migrationSourceId)
 
 ### GraphQL Queries
 
@@ -114,19 +115,20 @@ Two new queries were added to the Amplify Data schema:
 deleteTargetRepo(repositoryName: String!): JSON
 unlockSourceRepo(
   sourceRepositoryUrl: String!, 
+  migrationSourceId: String!,
   repositoryName: String!
 ): JSON
 ```
 
-Note: The unlock function automatically finds the migration ID by querying all migrations for the organization.
+Note: The `migrationSourceId` parameter is required for compatibility with the `start-migration` function, but the unlock operation internally queries the REST API to find the correct numeric migration ID (which is different from the GraphQL migration source ID).
 
 ### UI Logic
 
 The reset operation in the frontend:
 1. Calls `deleteTargetRepo` with the repository name
-2. Conditionally calls `unlockSourceRepo` if lockSource was true
-   - Only requires sourceRepositoryUrl and repositoryName
-   - The function automatically finds the correct migration ID
+2. Conditionally calls `unlockSourceRepo` if lockSource was true and migrationSourceId exists
+   - Passes sourceRepositoryUrl, migrationSourceId, and repositoryName
+   - The function internally queries migrations API to find the correct numeric migration ID
 3. Updates the database record with new state and cleared fields
 4. Handles errors gracefully - still resets state even if API calls fail
 
