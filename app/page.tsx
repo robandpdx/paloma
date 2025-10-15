@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { generateClient } from "aws-amplify/data";
 import type { Schema } from "@/amplify/data/resource";
 import { useAuthenticator } from "@aws-amplify/ui-react";
@@ -309,7 +309,13 @@ export default function App() {
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
   const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
+  const pollingReposRef = useRef<Set<string>>(new Set());
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    pollingReposRef.current = pollingRepos;
+  }, [pollingRepos]);
 
   useEffect(() => {
     const subscription = client.models.RepositoryMigration.observeQuery().subscribe({
@@ -323,7 +329,8 @@ export default function App() {
   useEffect(() => {
     repositories.forEach(repo => {
       // Start polling for repositories that are in_progress and have a repositoryMigrationId
-      if (repo.state === 'in_progress' && repo.repositoryMigrationId) {
+      // Check ref to avoid unnecessary state updates
+      if (repo.state === 'in_progress' && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
         startPolling(repo.id, repo.repositoryMigrationId);
       }
     });
