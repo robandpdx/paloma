@@ -95,10 +95,14 @@ After a reset:
   - TARGET_ADMIN_TOKEN
 
 #### 2. unlock-source-repo
-- **Purpose**: Unlock (unarchive) the source repository
-- **API**: GitHub REST API - PATCH /repos/{owner}/{repo} with archived=false
+- **Purpose**: Unlock the source repository that was locked during migration
+- **API**: GitHub Migration API - DELETE /orgs/{org}/migrations/{migration_id}/repos/{repo_name}/lock
 - **Environment Variables**:
   - SOURCE_ADMIN_TOKEN
+- **Required Arguments**:
+  - sourceRepositoryUrl - To extract the organization
+  - migrationSourceId - The migration ID
+  - repositoryName - The repository name
 
 ### GraphQL Queries
 
@@ -106,14 +110,20 @@ Two new queries were added to the Amplify Data schema:
 
 ```graphql
 deleteTargetRepo(repositoryName: String!): JSON
-unlockSourceRepo(sourceRepositoryUrl: String!): JSON
+unlockSourceRepo(
+  sourceRepositoryUrl: String!, 
+  migrationSourceId: String!,
+  repositoryName: String!
+): JSON
 ```
 
 ### UI Logic
 
 The reset operation in the frontend:
 1. Calls `deleteTargetRepo` with the repository name
-2. Conditionally calls `unlockSourceRepo` if lockSource was true
+2. Conditionally calls `unlockSourceRepo` if lockSource was true and migration was started
+   - Requires migrationSourceId and repositoryName to be present
+   - Uses the GitHub Migration API to unlock the repository
 3. Updates the database record with new state and cleared fields
 4. Handles errors gracefully - still resets state even if API calls fail
 

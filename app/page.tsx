@@ -394,10 +394,12 @@ export default function App() {
       }
 
       // Unlock source repository if it was locked
-      if (repo.lockSource && repo.sourceRepositoryUrl) {
+      if (repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
         console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
         const unlockResult = await client.queries.unlockSourceRepo({
           sourceRepositoryUrl: repo.sourceRepositoryUrl,
+          migrationSourceId: repo.migrationSourceId,
+          repositoryName: repo.repositoryName,
         });
         console.log('Unlock result:', unlockResult);
       }

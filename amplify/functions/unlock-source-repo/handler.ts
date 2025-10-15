@@ -5,6 +5,8 @@ const GITHUB_API_BASE = 'https://api.github.com';
 
 interface UnlockSourceRepoArguments {
   sourceRepositoryUrl: string;
+  migrationSourceId: string;
+  repositoryName: string;
 }
 
 interface UnlockSourceRepoEvent {
@@ -26,29 +28,28 @@ function parseRepoUrl(repoUrl: string): { owner: string; repo: string } {
 }
 
 /**
- * Unlock a repository using GitHub REST API
+ * Unlock a repository using GitHub Migration API
+ * DELETE /orgs/{org}/migrations/{migration_id}/repos/{repo_name}/lock
  */
 async function unlockRepository(
-  owner: string,
+  org: string,
+  migrationId: string,
   repo: string,
   token: string
 ): Promise<void> {
-  const url = `${GITHUB_API_BASE}/repos/${owner}/${repo}`;
+  const url = `${GITHUB_API_BASE}/orgs/${org}/migrations/${migrationId}/repos/${repo}/lock`;
   
   const response = await fetch(url, {
-    method: 'PATCH',
+    method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      archived: false,
-    }),
   });
 
-  if (!response.ok) {
+  // 204 No Content indicates success
+  if (response.status !== 204) {
     const errorText = await response.text();
     throw new Error(`Failed to unlock repository: ${response.status} ${response.statusText} - ${errorText}`);
   }
@@ -61,6 +62,8 @@ async function unlockRepository(
  * {
  *   arguments: {
  *     sourceRepositoryUrl: string;  // URL of the source repository to unlock
+ *     migrationSourceId: string;    // The migration source ID (used as migration ID)
+ *     repositoryName: string;        // The repository name
  *   }
  * }
  */
@@ -82,13 +85,19 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
     if (!args.sourceRepositoryUrl) {
       throw new Error('sourceRepositoryUrl is required in the event');
     }
+    if (!args.migrationSourceId) {
+      throw new Error('migrationSourceId is required in the event');
+    }
+    if (!args.repositoryName) {
+      throw new Error('repositoryName is required in the event');
+    }
 
-    // Parse the repository URL
-    const { owner, repo } = parseRepoUrl(args.sourceRepositoryUrl);
+    // Parse the repository URL to get the organization
+    const { owner } = parseRepoUrl(args.sourceRepositoryUrl);
 
-    // Unlock the repository
-    console.log(`Unlocking repository: ${owner}/${repo}`);
-    await unlockRepository(owner, repo, SOURCE_ADMIN_TOKEN);
+    // Unlock the repository using the migration API
+    console.log(`Unlocking repository: ${owner}/${args.repositoryName} from migration ${args.migrationSourceId}`);
+    await unlockRepository(owner, args.migrationSourceId, args.repositoryName, SOURCE_ADMIN_TOKEN);
 
     console.log('Repository unlocked successfully');
 
@@ -98,8 +107,9 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
         success: true,
         message: 'Repository unlocked successfully',
         sourceRepositoryUrl: args.sourceRepositoryUrl,
-        owner,
-        repo,
+        organization: owner,
+        repositoryName: args.repositoryName,
+        migrationSourceId: args.migrationSourceId,
       }),
     };
   } catch (error) {
