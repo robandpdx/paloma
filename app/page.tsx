@@ -222,6 +222,7 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
+  const isResetDisabled = repository.state === 'pending' || repository.state === 'reset';
 
   const handleCheckboxChange = async (checked: boolean) => {
     setLockSource(checked);
@@ -271,6 +272,9 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
           <button 
             className="btn btn-danger" 
             onClick={() => setShowResetConfirmation(true)}
+            disabled={isResetDisabled}
+            title={isResetDisabled ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
+            aria-label={isResetDisabled ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
           >
             Reset
           </button>
