@@ -289,7 +289,7 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
                 <p className="form-help">This will:</p>
                 <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
                   {repository.state !== 'pending' && <li>Delete the target repository if it exists</li>}
-                  {repository.lockSource && repository.migrationSourceId && <li>Unlock the source repository</li>}
+                  {repository.lockSource && repository.sourceRepositoryUrl && repository.migrationSourceId && repository.repositoryName && <li>Unlock the source repository</li>}
                   <li>Clear migration IDs</li>
                   <li>Reset the migration state</li>
                 </ul>
