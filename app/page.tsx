@@ -17,17 +17,18 @@ type RepositoryMigration = Schema["RepositoryMigration"]["type"];
 
 interface AddRepoModalProps {
   onClose: () => void;
-  onAdd: (url: string, name: string, lockSource: boolean) => void;
+  onAdd: (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => void;
 }
 
 function AddRepoModal({ onClose, onAdd }: AddRepoModalProps) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   const [lockSource, setLockSource] = useState(false);
+  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
 
   const handleAdd = () => {
     if (url && name) {
-      onAdd(url, name, lockSource);
+      onAdd(url, name, lockSource, repositoryVisibility);
       onClose();
     }
   };
@@ -82,6 +83,19 @@ function AddRepoModal({ onClose, onAdd }: AddRepoModalProps) {
               onChange={(e) => setName(e.target.value)}
             />
             <div className="form-help">Enter the name for the migrated repository</div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Repository Visibility</label>
+            <select
+              className="form-input"
+              value={repositoryVisibility}
+              onChange={(e) => setRepositoryVisibility(e.target.value)}
+            >
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+              <option value="internal">Internal</option>
+            </select>
+            <div className="form-help">Select the visibility for the migrated repository</div>
           </div>
           <div className="form-group">
             <label className="form-checkbox-wrapper">
@@ -198,6 +212,9 @@ function InfoModal({ repository, onClose }: InfoModalProps) {
               </>
             )}
             
+            <div className="info-label">Repository Visibility:</div>
+            <div className="info-value">{repository.repositoryVisibility || 'private'}</div>
+            
             <div className="info-label">Lock source repository:</div>
             <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
           </div>
@@ -213,20 +230,35 @@ function InfoModal({ repository, onClose }: InfoModalProps) {
 interface SettingsModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
-  onUpdate: (lockSource: boolean) => void;
+  onUpdate: (lockSource: boolean, repositoryVisibility: string) => void;
   onReset: () => void;
 }
 
 function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModalProps) {
   const [lockSource, setLockSource] = useState(repository.lockSource || false);
+  const [repositoryVisibility, setRepositoryVisibility] = useState(repository.repositoryVisibility || 'private');
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
   const isResetDisabled = repository.state === 'pending' || repository.state === 'reset';
+  const isSettingsEditable = repository.state === 'pending' || repository.state === 'reset';
+
+  // Sync local state with repository prop when it changes
+  useEffect(() => {
+    setLockSource(repository.lockSource || false);
+    setRepositoryVisibility(repository.repositoryVisibility || 'private');
+  }, [repository.lockSource, repository.repositoryVisibility]);
 
   const handleCheckboxChange = async (checked: boolean) => {
     setLockSource(checked);
-    await onUpdate(checked);
+    await onUpdate(checked, repositoryVisibility);
+    setShowSaveConfirmation(true);
+    setTimeout(() => setShowSaveConfirmation(false), 2000);
+  };
+
+  const handleVisibilityChange = async (visibility: string) => {
+    setRepositoryVisibility(visibility);
+    await onUpdate(lockSource, visibility);
     setShowSaveConfirmation(true);
     setTimeout(() => setShowSaveConfirmation(false), 2000);
   };
@@ -245,6 +277,24 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
+          <div className="form-group">
+            <label className="form-label">Repository Visibility</label>
+            <select
+              className="form-input"
+              value={repositoryVisibility}
+              onChange={(e) => handleVisibilityChange(e.target.value)}
+              disabled={!isSettingsEditable}
+            >
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+              <option value="internal">Internal</option>
+            </select>
+            <div className="form-help">
+              {!isSettingsEditable 
+                ? 'This setting cannot be changed after migration has started or been completed'
+                : 'Select the visibility for the migrated repository'}
+            </div>
+          </div>
           <div className="form-group">
             <label className="form-checkbox-wrapper">
               <input
@@ -294,6 +344,8 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
                   {repository.lockSource && <li>Unlock the source repository</li>}
                   <li>Clear migration IDs</li>
                   <li>Reset the migration state</li>
+                  <li>Set repository visibility to private</li>
+                  <li>Clear lock source repository setting</li>
                 </ul>
               </div>
               <div className="modal-footer">
@@ -390,12 +442,23 @@ export default function App() {
     });
   }, [repositories, startPolling]);
 
-  const addRepository = async (url: string, name: string, lockSource: boolean) => {
+  // Keep settingsRepo in sync with repositories array when data changes
+  useEffect(() => {
+    if (settingsRepo) {
+      const updatedRepo = repositories.find(r => r.id === settingsRepo.id);
+      if (updatedRepo) {
+        setSettingsRepo(updatedRepo);
+      }
+    }
+  }, [repositories, settingsRepo]);
+
+  const addRepository = async (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => {
     await client.models.RepositoryMigration.create({
       sourceRepositoryUrl: url,
       repositoryName: name,
       state: 'pending',
       lockSource,
+      repositoryVisibility,
     });
   };
 
@@ -404,10 +467,11 @@ export default function App() {
     setDeleteRepo(null);
   };
 
-  const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean) => {
+  const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: string) => {
     await client.models.RepositoryMigration.update({
       id: repo.id,
       lockSource,
+      repositoryVisibility,
     });
   };
 
@@ -440,6 +504,7 @@ export default function App() {
         migrationSourceId: null,
         repositoryMigrationId: null,
         lockSource: false,
+        repositoryVisibility: 'private', // Reset to default
         failureReason: null,
       });
 
@@ -453,6 +518,7 @@ export default function App() {
         migrationSourceId: null,
         repositoryMigrationId: null,
         lockSource: false,
+        repositoryVisibility: 'private', // Reset to default
         failureReason: error instanceof Error ? error.message : 'Error during reset',
       });
     }
@@ -471,7 +537,7 @@ export default function App() {
       const result = await client.queries.startMigration({
         sourceRepositoryUrl: repo.sourceRepositoryUrl,
         repositoryName: repo.repositoryName,
-        targetRepoVisibility: 'private',
+        targetRepoVisibility: repo.repositoryVisibility || 'private',
         continueOnError: true,
         lockSource: repo.lockSource || false,
         destinationOwnerId: repo.destinationOwnerId || undefined,
@@ -708,7 +774,7 @@ export default function App() {
         <SettingsModal
           repository={settingsRepo}
           onClose={() => setSettingsRepo(null)}
-          onUpdate={(lockSource) => updateRepositorySettings(settingsRepo, lockSource)}
+          onUpdate={(lockSource, repositoryVisibility) => updateRepositorySettings(settingsRepo, lockSource, repositoryVisibility)}
           onReset={() => resetRepository(settingsRepo)}
         />
       )}

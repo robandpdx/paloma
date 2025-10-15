@@ -162,6 +162,9 @@ async function startRepositoryMigration(
   continueOnError: boolean = true,
   lockSource?: boolean
 ): Promise<StartRepositoryMigrationData> {
+  // Ensure targetRepoVisibility has a valid value
+  const visibility = targetRepoVisibility || 'private';
+  
   const mutation = `
     mutation startRepositoryMigration(
       $sourceId: ID!,
@@ -206,7 +209,7 @@ async function startRepositoryMigration(
     continueOnError,
     accessToken: sourceToken,
     githubPat: targetToken,
-    targetRepoVisibility,
+    targetRepoVisibility: visibility,
     lockSource,
   };
 

@@ -17,6 +17,7 @@ const schema = a.schema({
       state: a.string(), // 'pending', 'in_progress', 'completed', 'failed'
       failureReason: a.string(),
       lockSource: a.boolean(), // Whether to lock the source repository during migration
+      repositoryVisibility: a.string(), // 'private', 'public', or 'internal'
     })
     .authorization((allow) => [allow.publicApiKey()]),
   
