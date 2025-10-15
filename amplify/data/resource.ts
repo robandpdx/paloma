@@ -2,6 +2,8 @@ import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 import { startMigration } from "../functions/start-migration/resource.js";
 import { checkMigrationStatus } from "../functions/check-migration-status/resource.js";
 import { getOwnerId } from "../functions/get-owner-id/resource.js";
+import { deleteTargetRepo } from "../functions/delete-target-repo/resource.js";
+import { unlockSourceRepo } from "../functions/unlock-source-repo/resource.js";
 
 const schema = a.schema({
   // Repository Migration tracking model
@@ -47,6 +49,25 @@ const schema = a.schema({
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(getOwnerId)),
+  deleteTargetRepo: a
+    .query()
+    .arguments({
+      repositoryName: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(deleteTargetRepo)),
+  
+  unlockSourceRepo: a
+    .query()
+    .arguments({
+      sourceRepositoryUrl: a.string().required(),
+      migrationSourceId: a.string().required(),
+      repositoryName: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(unlockSourceRepo)),
 });
 
 export type Schema = ClientSchema<typeof schema>;
