@@ -5,12 +5,27 @@ const GITHUB_API_BASE = 'https://api.github.com';
 
 interface UnlockSourceRepoArguments {
   sourceRepositoryUrl: string;
-  migrationSourceId: string;
   repositoryName: string;
 }
 
 interface UnlockSourceRepoEvent {
   arguments: UnlockSourceRepoArguments;
+}
+
+interface Migration {
+  id: number;
+  guid: string;
+  state: string;
+  lock_repositories: boolean;
+  repositories: Array<{
+    id: number;
+    node_id: string;
+    name: string;
+    full_name: string;
+    owner: {
+      login: string;
+    };
+  }>;
 }
 
 /**
@@ -28,12 +43,57 @@ function parseRepoUrl(repoUrl: string): { owner: string; repo: string } {
 }
 
 /**
+ * Get the migration ID for a repository by querying all migrations
+ * and finding the one that contains the repository
+ */
+async function getMigrationId(
+  org: string,
+  repoName: string,
+  token: string
+): Promise<number> {
+  const url = `${GITHUB_API_BASE}/orgs/${org}/migrations?per_page=100`;
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get migrations: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+
+  const migrations: Migration[] = await response.json();
+
+  if (migrations.length === 0) {
+    throw new Error(`No migrations found for organization: ${org}`);
+  }
+
+  // Find the migration that contains this repository
+  const fullRepoName = `${org}/${repoName}`;
+  for (const migration of migrations) {
+    for (const repo of migration.repositories) {
+      if (repo.full_name === fullRepoName) {
+        console.log(`Found migration ID ${migration.id} for repository ${fullRepoName}`);
+        return migration.id;
+      }
+    }
+  }
+
+  throw new Error(`No migration found for repository: ${fullRepoName}`);
+}
+
+/**
  * Unlock a repository using GitHub Migration API
  * DELETE /orgs/{org}/migrations/{migration_id}/repos/{repo_name}/lock
  */
 async function unlockRepository(
   org: string,
-  migrationId: string,
+  migrationId: number,
   repo: string,
   token: string
 ): Promise<void> {
@@ -62,7 +122,6 @@ async function unlockRepository(
  * {
  *   arguments: {
  *     sourceRepositoryUrl: string;  // URL of the source repository to unlock
- *     migrationSourceId: string;    // The migration source ID (used as migration ID)
  *     repositoryName: string;        // The repository name
  *   }
  * }
@@ -85,9 +144,6 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
     if (!args.sourceRepositoryUrl) {
       throw new Error('sourceRepositoryUrl is required in the event');
     }
-    if (!args.migrationSourceId) {
-      throw new Error('migrationSourceId is required in the event');
-    }
     if (!args.repositoryName) {
       throw new Error('repositoryName is required in the event');
     }
@@ -95,9 +151,13 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
     // Parse the repository URL to get the organization
     const { owner } = parseRepoUrl(args.sourceRepositoryUrl);
 
+    // Get the migration ID by querying all migrations and finding the one with this repo
+    console.log(`Getting migration ID for repository: ${owner}/${args.repositoryName}`);
+    const migrationId = await getMigrationId(owner, args.repositoryName, SOURCE_ADMIN_TOKEN);
+
     // Unlock the repository using the migration API
-    console.log(`Unlocking repository: ${owner}/${args.repositoryName} from migration ${args.migrationSourceId}`);
-    await unlockRepository(owner, args.migrationSourceId, args.repositoryName, SOURCE_ADMIN_TOKEN);
+    console.log(`Unlocking repository: ${owner}/${args.repositoryName} from migration ${migrationId}`);
+    await unlockRepository(owner, migrationId, args.repositoryName, SOURCE_ADMIN_TOKEN);
 
     console.log('Repository unlocked successfully');
 
@@ -109,7 +169,7 @@ export const handler: Handler = async (event: UnlockSourceRepoEvent, context) =>
         sourceRepositoryUrl: args.sourceRepositoryUrl,
         organization: owner,
         repositoryName: args.repositoryName,
-        migrationSourceId: args.migrationSourceId,
+        migrationId: migrationId,
       }),
     };
   } catch (error) {

@@ -55,7 +55,6 @@ const schema = a.schema({
     .query()
     .arguments({
       sourceRepositoryUrl: a.string().required(),
-      migrationSourceId: a.string().required(),
       repositoryName: a.string().required(),
     })
     .returns(a.json())
