@@ -19,7 +19,10 @@ const schema = a.schema({
       lockSource: a.boolean(), // Whether to lock the source repository during migration
       repositoryVisibility: a.string(), // 'private', 'public', or 'internal'
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization((allow) => [
+      allow.publicApiKey(),
+      allow.authenticated().to(['read', 'create', 'update', 'delete']),
+    ]),
   
   // Migration function queries
   startMigration: a

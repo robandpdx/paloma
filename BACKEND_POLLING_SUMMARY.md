@@ -25,11 +25,12 @@ A scheduled Lambda function that:
 
 **Environment Variables**:
 - `TARGET_ADMIN_TOKEN` - GitHub PAT (manually configured)
-- `AMPLIFY_DATA_ENDPOINT` - Auto-configured
-- `AMPLIFY_API_KEY` - Auto-configured
+- `AMPLIFY_DATA_ENDPOINT` - GraphQL endpoint (auto-configured)
+
+**Note**: The Lambda function uses IAM permissions to access the Data API. No API key is required.
 
 #### 2. EventBridge Schedule
-**Location**: `amplify/custom/polling-schedule.ts`
+**Location**: Inline in `amplify/backend.ts`
 
 Infrastructure as code that:
 - Creates EventBridge rule with 1-minute schedule

@@ -18,9 +18,7 @@ Ensure the following environment variable is configured in Amplify Console:
 |----------|-------------|---------|----------|
 | `TARGET_ADMIN_TOKEN` | GitHub PAT for target GHEC | `ghp_xxxx...` | Yes |
 
-**Note**: The following are automatically configured by Amplify:
-- `AMPLIFY_DATA_ENDPOINT` - Set automatically in backend.ts
-- `AMPLIFY_API_KEY` - Set automatically in backend.ts
+**Note**: `AMPLIFY_DATA_ENDPOINT` is automatically configured by the backend and the Lambda function uses IAM permissions to access the Data API (no API key needed).
 
 ### 2. GitHub Token Permissions
 Verify your `TARGET_ADMIN_TOKEN` has these scopes:

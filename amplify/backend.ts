@@ -11,6 +11,7 @@ import { Rule, Schedule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { Stack } from 'aws-cdk-lib';
 import { Duration } from 'aws-cdk-lib';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 
 const backend = defineBackend({
   auth,
@@ -23,20 +24,28 @@ const backend = defineBackend({
   pollMigrationStatus,
 });
 
-// Add the Amplify Data endpoint and API key to the polling function environment
+// Get the Lambda function and Data resources
+const lambdaFunction = backend.pollMigrationStatus.resources.lambda;
 const dataResources = backend.data.resources;
-const cfnGraphQLApi = dataResources.cfnResources.cfnGraphqlApi;
-const apiEndpoint = cfnGraphQLApi.attrGraphQlUrl;
-const apiKey = dataResources.cfnResources.cfnApiKey?.attrApiKey;
+const graphqlApi = dataResources.graphqlApi;
+const apiEndpoint = dataResources.cfnResources.cfnGraphqlApi.attrGraphQlUrl;
 
-if (apiKey) {
-  backend.pollMigrationStatus.addEnvironment('AMPLIFY_DATA_ENDPOINT', apiEndpoint);
-  backend.pollMigrationStatus.addEnvironment('AMPLIFY_API_KEY', apiKey);
-}
+// Grant the Lambda function permission to query and mutate the AppSync API
+lambdaFunction.addToRolePolicy(
+  new PolicyStatement({
+    actions: [
+      'appsync:GraphQL',
+    ],
+    resources: [
+      `${graphqlApi.arn}/*`,
+    ],
+  })
+);
+
+// Set the GraphQL endpoint as an environment variable
+backend.pollMigrationStatus.addEnvironment('AMPLIFY_DATA_ENDPOINT', apiEndpoint);
 
 // Add the EventBridge schedule for polling
-// Get the Lambda function resource directly from the backend
-const lambdaFunction = backend.pollMigrationStatus.resources.lambda;
 const stack = Stack.of(lambdaFunction);
 
 // Create EventBridge rule to run every 1 minute

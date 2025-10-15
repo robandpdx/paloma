@@ -77,7 +77,8 @@ The frontend now only:
 The polling function requires:
 - `TARGET_ADMIN_TOKEN`: GitHub PAT for accessing the GitHub API (set manually)
 - `AMPLIFY_DATA_ENDPOINT`: GraphQL endpoint (set automatically by backend.ts)
-- `AMPLIFY_API_KEY`: API key for Data access (set automatically by backend.ts)
+
+**Note**: The Lambda function uses IAM permissions to access the AppSync API. No API key is required. The function is automatically granted the necessary permissions via IAM policy during deployment.
 
 ## Database Schema
 

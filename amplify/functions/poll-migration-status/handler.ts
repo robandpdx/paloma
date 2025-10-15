@@ -1,4 +1,8 @@
 import type { Handler } from 'aws-lambda';
+import { SignatureV4 } from '@aws-sdk/signature-v4';
+import { Sha256 } from '@aws-crypto/sha256-js';
+import { HttpRequest } from '@aws-sdk/protocol-http';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
 
 // GraphQL API endpoint for GitHub Enterprise Cloud
 const GITHUB_GRAPHQL_ENDPOINT = 'https://api.github.com/graphql';
@@ -86,14 +90,65 @@ async function getMigrationStatus(migrationId: string, token: string): Promise<G
 }
 
 /**
+ * Makes a signed GraphQL request to AppSync using IAM credentials
+ */
+async function makeAppSyncRequest<T>(
+  endpoint: string,
+  query: string,
+  variables?: Record<string, any>
+): Promise<T> {
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const url = new URL(endpoint);
+  
+  const requestBody = JSON.stringify({ query, variables });
+  
+  const request = new HttpRequest({
+    hostname: url.hostname,
+    path: url.pathname,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      host: url.hostname,
+    },
+    body: requestBody,
+  });
+
+  const signer = new SignatureV4({
+    service: 'appsync',
+    region,
+    credentials: defaultProvider(),
+    sha256: Sha256,
+  });
+
+  const signedRequest = await signer.sign(request);
+  
+  const response = await fetch(endpoint, {
+    method: signedRequest.method,
+    headers: signedRequest.headers,
+    body: requestBody,
+  });
+
+  if (!response.ok) {
+    throw new Error(`AppSync request failed: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  
+  if (result.errors) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
+  }
+
+  return result.data;
+}
+
+/**
  * Query the Amplify Data table for repositories in 'in_progress' state
  */
 async function getInProgressRepositories(): Promise<RepositoryMigration[]> {
   const AMPLIFY_DATA_ENDPOINT = process.env.AMPLIFY_DATA_ENDPOINT;
-  const AMPLIFY_API_KEY = process.env.AMPLIFY_API_KEY;
 
-  if (!AMPLIFY_DATA_ENDPOINT || !AMPLIFY_API_KEY) {
-    throw new Error('AMPLIFY_DATA_ENDPOINT or AMPLIFY_API_KEY not set');
+  if (!AMPLIFY_DATA_ENDPOINT) {
+    throw new Error('AMPLIFY_DATA_ENDPOINT not set');
   }
 
   const query = `
@@ -109,26 +164,12 @@ async function getInProgressRepositories(): Promise<RepositoryMigration[]> {
     }
   `;
 
-  const response = await fetch(AMPLIFY_DATA_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'x-api-key': AMPLIFY_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query }),
-  });
+  const data = await makeAppSyncRequest<{ listRepositoryMigrations: { items: RepositoryMigration[] } }>(
+    AMPLIFY_DATA_ENDPOINT,
+    query
+  );
 
-  if (!response.ok) {
-    throw new Error(`Failed to query Amplify Data: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
-  }
-
-  return result.data?.listRepositoryMigrations?.items || [];
+  return data.listRepositoryMigrations?.items || [];
 }
 
 /**
@@ -140,10 +181,9 @@ async function updateRepositoryStatus(
   failureReason?: string
 ): Promise<void> {
   const AMPLIFY_DATA_ENDPOINT = process.env.AMPLIFY_DATA_ENDPOINT;
-  const AMPLIFY_API_KEY = process.env.AMPLIFY_API_KEY;
 
-  if (!AMPLIFY_DATA_ENDPOINT || !AMPLIFY_API_KEY) {
-    throw new Error('AMPLIFY_DATA_ENDPOINT or AMPLIFY_API_KEY not set');
+  if (!AMPLIFY_DATA_ENDPOINT) {
+    throw new Error('AMPLIFY_DATA_ENDPOINT not set');
   }
 
   const mutation = `
@@ -162,24 +202,7 @@ async function updateRepositoryStatus(
     failureReason: failureReason || null,
   };
 
-  const response = await fetch(AMPLIFY_DATA_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'x-api-key': AMPLIFY_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: mutation, variables }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to update repository: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
-  }
+  await makeAppSyncRequest(AMPLIFY_DATA_ENDPOINT, mutation, variables);
 }
 
 /**
