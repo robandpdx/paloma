@@ -3,9 +3,13 @@ import { SignatureV4 } from '@aws-sdk/signature-v4';
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { HttpRequest } from '@aws-sdk/protocol-http';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { AppSyncClient, ListGraphqlApisCommand } from '@aws-sdk/client-appsync';
 
 // GraphQL API endpoint for GitHub Enterprise Cloud
 const GITHUB_GRAPHQL_ENDPOINT = 'https://api.github.com/graphql';
+
+// Cache for the AppSync endpoint (to avoid repeated API calls)
+let cachedAppSyncEndpoint: string | null = null;
 
 interface GraphQLResponse<T> {
   data?: T;
@@ -90,6 +94,41 @@ async function getMigrationStatus(migrationId: string, token: string): Promise<G
 }
 
 /**
+ * Discover the AppSync GraphQL endpoint at runtime
+ * This avoids circular dependency issues in CloudFormation
+ */
+async function getAppSyncEndpoint(): Promise<string> {
+  // Return cached endpoint if available
+  if (cachedAppSyncEndpoint) {
+    return cachedAppSyncEndpoint;
+  }
+
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const client = new AppSyncClient({ region });
+  
+  try {
+    const command = new ListGraphqlApisCommand({});
+    const response = await client.send(command);
+    
+    // Find the Amplify Data GraphQL API (it should be the first/only one in this account)
+    const api = response.graphqlApis?.[0];
+    
+    if (!api?.uris?.GRAPHQL) {
+      throw new Error('No AppSync GraphQL API found');
+    }
+    
+    // Cache the endpoint for subsequent invocations
+    cachedAppSyncEndpoint = api.uris.GRAPHQL;
+    console.log(`Discovered AppSync endpoint: ${cachedAppSyncEndpoint}`);
+    
+    return cachedAppSyncEndpoint;
+  } catch (error) {
+    console.error('Failed to discover AppSync endpoint:', error);
+    throw new Error(`Failed to discover AppSync endpoint: ${error}`);
+  }
+}
+
+/**
  * Makes a signed GraphQL request to AppSync using IAM credentials
  */
 async function makeAppSyncRequest<T>(
@@ -145,11 +184,7 @@ async function makeAppSyncRequest<T>(
  * Query the Amplify Data table for repositories in 'in_progress' state
  */
 async function getInProgressRepositories(): Promise<RepositoryMigration[]> {
-  const AMPLIFY_DATA_ENDPOINT = process.env.AMPLIFY_DATA_ENDPOINT;
-
-  if (!AMPLIFY_DATA_ENDPOINT) {
-    throw new Error('AMPLIFY_DATA_ENDPOINT not set');
-  }
+  const endpoint = await getAppSyncEndpoint();
 
   const query = `
     query ListInProgressMigrations {
@@ -165,7 +200,7 @@ async function getInProgressRepositories(): Promise<RepositoryMigration[]> {
   `;
 
   const data = await makeAppSyncRequest<{ listRepositoryMigrations: { items: RepositoryMigration[] } }>(
-    AMPLIFY_DATA_ENDPOINT,
+    endpoint,
     query
   );
 
@@ -180,11 +215,7 @@ async function updateRepositoryStatus(
   state: string,
   failureReason?: string
 ): Promise<void> {
-  const AMPLIFY_DATA_ENDPOINT = process.env.AMPLIFY_DATA_ENDPOINT;
-
-  if (!AMPLIFY_DATA_ENDPOINT) {
-    throw new Error('AMPLIFY_DATA_ENDPOINT not set');
-  }
+  const endpoint = await getAppSyncEndpoint();
 
   const mutation = `
     mutation UpdateRepositoryMigration($id: ID!, $state: String, $failureReason: String) {
@@ -202,7 +233,7 @@ async function updateRepositoryStatus(
     failureReason: failureReason || null,
   };
 
-  await makeAppSyncRequest(AMPLIFY_DATA_ENDPOINT, mutation, variables);
+  await makeAppSyncRequest(endpoint, mutation, variables);
 }
 
 /**
