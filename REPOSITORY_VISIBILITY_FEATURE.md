@@ -8,10 +8,12 @@ This feature adds the ability to specify repository visibility (private, public,
 ### 1. Database Model Changes
 **File**: `amplify/data/resource.ts`
 
-Added `repositoryVisibility` field to the RepositoryMigration model:
+Added `repositoryVisibility` field to the RepositoryMigration model as an optional field:
 ```typescript
-repositoryVisibility: a.string(), // 'private', 'public', or 'internal'
+repositoryVisibility: a.string(), // Optional: 'private', 'public', or 'internal'
 ```
+
+The field is optional to maintain backwards compatibility with existing records.
 
 ### 2. UI Changes
 
