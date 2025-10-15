@@ -440,6 +440,16 @@ export default function App() {
     });
   }, [repositories, startPolling]);
 
+  // Keep settingsRepo in sync with repositories array when data changes
+  useEffect(() => {
+    if (settingsRepo) {
+      const updatedRepo = repositories.find(r => r.id === settingsRepo.id);
+      if (updatedRepo) {
+        setSettingsRepo(updatedRepo);
+      }
+    }
+  }, [repositories, settingsRepo]);
+
   const addRepository = async (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => {
     await client.models.RepositoryMigration.create({
       sourceRepositoryUrl: url,
