@@ -214,18 +214,27 @@ interface SettingsModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
   onUpdate: (lockSource: boolean) => void;
+  onReset: () => void;
 }
 
-function SettingsModal({ repository, onClose, onUpdate }: SettingsModalProps) {
+function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModalProps) {
   const [lockSource, setLockSource] = useState(repository.lockSource || false);
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
+  const isResetDisabled = repository.state === 'pending' || repository.state === 'reset';
 
   const handleCheckboxChange = async (checked: boolean) => {
     setLockSource(checked);
     await onUpdate(checked);
     setShowSaveConfirmation(true);
     setTimeout(() => setShowSaveConfirmation(false), 2000);
+  };
+
+  const handleReset = () => {
+    setShowResetConfirmation(false);
+    onReset();
+    onClose();
   };
 
   return (
@@ -259,6 +268,44 @@ function SettingsModal({ repository, onClose, onUpdate }: SettingsModalProps) {
             </div>
           )}
         </div>
+        <div className="modal-footer">
+          <button 
+            className="btn btn-danger" 
+            onClick={() => setShowResetConfirmation(true)}
+            disabled={isResetDisabled}
+          >
+            Reset
+          </button>
+        </div>
+        {showResetConfirmation && (
+          <div className="modal-overlay" onClick={() => setShowResetConfirmation(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 className="modal-title">Confirm Reset</h2>
+                <button className="modal-close" onClick={() => setShowResetConfirmation(false)}>×</button>
+              </div>
+              <div className="modal-body">
+                <p>Are you sure you want to reset this repository?</p>
+                <p className="form-help">This will:</p>
+                <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+                  <li>Delete the target repository if it exists</li>
+                  {repository.lockSource && <li>Unlock the source repository</li>}
+                  <li>Clear migration IDs</li>
+                  <li>Reset the migration state</li>
+                </ul>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-default" onClick={() => setShowResetConfirmation(false)}>Cancel</button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={handleReset}
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -338,6 +385,53 @@ export default function App() {
       id: repo.id,
       lockSource,
     });
+  };
+
+  const resetRepository = async (repo: RepositoryMigration) => {
+    try {
+      // Delete target repository if migration was started
+      if (repo.repositoryName) {
+        console.log('Deleting target repository:', repo.repositoryName);
+        const deleteResult = await client.queries.deleteTargetRepo({
+          repositoryName: repo.repositoryName,
+        });
+        console.log('Delete result:', deleteResult);
+      }
+
+      // Unlock source repository if it was locked
+      if (repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
+        console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
+        const unlockResult = await client.queries.unlockSourceRepo({
+          sourceRepositoryUrl: repo.sourceRepositoryUrl,
+          migrationSourceId: repo.migrationSourceId,
+          repositoryName: repo.repositoryName,
+        });
+        console.log('Unlock result:', unlockResult);
+      }
+
+      // Update the repository record
+      await client.models.RepositoryMigration.update({
+        id: repo.id,
+        state: 'reset',
+        migrationSourceId: null,
+        repositoryMigrationId: null,
+        lockSource: false,
+        failureReason: null,
+      });
+
+      console.log('Repository reset successfully');
+    } catch (error) {
+      console.error('Error resetting repository:', error);
+      // Still update the state even if the API calls failed
+      await client.models.RepositoryMigration.update({
+        id: repo.id,
+        state: 'reset',
+        migrationSourceId: null,
+        repositoryMigrationId: null,
+        lockSource: false,
+        failureReason: error instanceof Error ? error.message : 'Error during reset',
+      });
+    }
   };
 
   const startMigration = async (repo: RepositoryMigration) => {
@@ -467,6 +561,8 @@ export default function App() {
         return 'btn-status-completed';
       case 'failed':
         return 'btn-status-failed';
+      case 'reset':
+        return 'btn-primary';
       default:
         return 'btn-primary';
     }
@@ -480,14 +576,16 @@ export default function App() {
         return 'Completed';
       case 'failed':
         return 'Failed';
+      case 'reset':
+        return 'Start Migration';
       default:
         return 'Start Migration';
     }
   };
 
   const handleStatusButtonClick = (repo: RepositoryMigration) => {
-    // If pending, start the migration
-    if (!repo.state || repo.state === 'pending') {
+    // If pending or reset, start the migration
+    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
       startMigration(repo);
     } else {
       // Otherwise, show the info modal
@@ -589,6 +687,7 @@ export default function App() {
           repository={settingsRepo}
           onClose={() => setSettingsRepo(null)}
           onUpdate={(lockSource) => updateRepositorySettings(settingsRepo, lockSource)}
+          onReset={() => resetRepository(settingsRepo)}
         />
       )}
 
