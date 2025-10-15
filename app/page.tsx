@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect } from "react";
 import { generateClient } from "aws-amplify/data";
 import type { Schema } from "@/amplify/data/resource";
 import { useAuthenticator } from "@aws-amplify/ui-react";
@@ -409,19 +409,7 @@ export default function App() {
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
-  const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
-  const pollingReposRef = useRef<Set<string>>(new Set());
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    pollingReposRef.current = pollingRepos;
-  }, [pollingRepos]);
-
-  // Define startPolling before it's used in effects
-  const startPolling = useCallback((repoId: string, migrationId: string) => {
-    setPollingRepos(prev => new Set(prev).add(repoId));
-  }, []);
 
   useEffect(() => {
     const subscription = client.models.RepositoryMigration.observeQuery().subscribe({
@@ -430,17 +418,6 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Resume polling for repositories that are in progress on page load/refresh
-  useEffect(() => {
-    repositories.forEach(repo => {
-      // Start polling for repositories that are in_progress and have a repositoryMigrationId
-      // Check ref to avoid unnecessary state updates
-      if (repo.state === 'in_progress' && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
-        startPolling(repo.id, repo.repositoryMigrationId);
-      }
-    });
-  }, [repositories, startPolling]);
 
   // Keep settingsRepo in sync with repositories array when data changes
   useEffect(() => {
@@ -561,8 +538,8 @@ export default function App() {
             state: 'in_progress',
           });
 
-          // Start polling for status
-          startPolling(repo.id, response.migrationId);
+          // Backend polling will now handle status updates automatically
+          console.log('Migration started successfully. Backend polling will monitor progress.');
         } else {
           await client.models.RepositoryMigration.update({
             id: repo.id,
@@ -580,66 +557,6 @@ export default function App() {
       });
     }
   };
-
-  const checkMigrationStatus = useCallback(async (repoId: string, migrationId: string) => {
-    try {
-      const result = await client.queries.checkMigrationStatus({
-        migrationId,
-      });
-
-      if (result.data) {
-        // Parse the outer JSON wrapper
-        const lambdaResponse = JSON.parse(result.data as string);
-        // Parse the inner body JSON
-        const response = JSON.parse(lambdaResponse.body);
-        
-        if (response.success) {
-          const state = response.state.toLowerCase();
-          
-          // Update repository with current state
-          await client.models.RepositoryMigration.update({
-            id: repoId,
-            state,
-            failureReason: response.failureReason || undefined,
-          });
-
-          // Stop polling if migration is complete or failed
-          if (state === 'failed' || state === 'succeeded' || state === 'completed') {
-            setPollingRepos(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(repoId);
-              return newSet;
-            });
-            
-            // If succeeded, update state to completed
-            if (state === 'succeeded') {
-              await client.models.RepositoryMigration.update({
-                id: repoId,
-                state: 'completed',
-              });
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error checking migration status:', error);
-    }
-  }, []);
-
-  // Polling effect
-  useEffect(() => {
-    if (pollingRepos.size === 0) return;
-
-    const interval = setInterval(() => {
-      repositories.forEach(repo => {
-        if (pollingRepos.has(repo.id) && repo.repositoryMigrationId) {
-          checkMigrationStatus(repo.id, repo.repositoryMigrationId);
-        }
-      });
-    }, 30000); // Poll every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [pollingRepos, repositories, checkMigrationStatus]);
 
   const getStatusButtonClass = (state?: string | null) => {
     switch (state) {
