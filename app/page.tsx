@@ -362,6 +362,11 @@ export default function App() {
     pollingReposRef.current = pollingRepos;
   }, [pollingRepos]);
 
+  // Define startPolling before it's used in effects
+  const startPolling = useCallback((repoId: string, migrationId: string) => {
+    setPollingRepos(prev => new Set(prev).add(repoId));
+  }, []);
+
   useEffect(() => {
     const subscription = client.models.RepositoryMigration.observeQuery().subscribe({
       next: (data) => setRepositories([...data.items]),
@@ -547,10 +552,6 @@ export default function App() {
     } catch (error) {
       console.error('Error checking migration status:', error);
     }
-  }, []);
-
-  const startPolling = useCallback((repoId: string, migrationId: string) => {
-    setPollingRepos(prev => new Set(prev).add(repoId));
   }, []);
 
   // Polling effect
