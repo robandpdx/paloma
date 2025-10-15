@@ -1,6 +1,7 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 import { startMigration } from "../functions/start-migration/resource.js";
 import { checkMigrationStatus } from "../functions/check-migration-status/resource.js";
+import { getOwnerId } from "../functions/get-owner-id/resource.js";
 
 const schema = a.schema({
   // Repository Migration tracking model
@@ -26,6 +27,7 @@ const schema = a.schema({
       targetRepoVisibility: a.string(),
       continueOnError: a.boolean(),
       lockSource: a.boolean(),
+      destinationOwnerId: a.string(), // Optional: reuse if already known
     })
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
@@ -39,6 +41,12 @@ const schema = a.schema({
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(checkMigrationStatus)),
+  
+  getOwnerId: a
+    .query()
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(getOwnerId)),
 });
 
 export type Schema = ClientSchema<typeof schema>;

@@ -349,12 +349,14 @@ export default function App() {
       });
 
       // Call the startMigration function
+      // Pass destinationOwnerId if it exists to skip the API call to fetch it
       const result = await client.queries.startMigration({
         sourceRepositoryUrl: repo.sourceRepositoryUrl,
         repositoryName: repo.repositoryName,
         targetRepoVisibility: 'private',
         continueOnError: true,
         lockSource: repo.lockSource || false,
+        destinationOwnerId: repo.destinationOwnerId || undefined,
       });
 
       console.log('Migration started:', result);

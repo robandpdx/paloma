@@ -48,6 +48,7 @@ interface MigrationArguments {
   targetRepoVisibility?: 'private' | 'public' | 'internal';
   continueOnError?: boolean;
   lockSource?: boolean;
+  destinationOwnerId?: string; // Optional: reuse if already known
 }
 
 interface MigrationEvent {
@@ -233,6 +234,7 @@ async function startRepositoryMigration(
  *     targetRepoVisibility?: 'private' | 'public' | 'internal';  // Defaults to 'private'
  *     continueOnError?: boolean;     // Defaults to true
  *     lockSource?: boolean;          // Lock the source repository during migration
+ *     destinationOwnerId?: string;   // Optional: reuse if already known to avoid API call
  *   }
  * }
  */
@@ -265,10 +267,18 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     if (!args.repositoryName) {
       throw new Error('repositoryName is required in the event');
     }
+    
     // Step 1: Get the ownerId for the target organization
-    console.log(`Step 1: Getting ownerId for organization: ${TARGET_ORGANIZATION}`);
-    const ownerId = await getOwnerId(TARGET_ORGANIZATION, TARGET_ADMIN_TOKEN);
-    console.log(`Owner ID: ${ownerId}`);
+    // Reuse destinationOwnerId if provided, otherwise fetch it
+    let ownerId: string;
+    if (args.destinationOwnerId) {
+      console.log(`Step 1: Reusing provided destinationOwnerId: ${args.destinationOwnerId}`);
+      ownerId = args.destinationOwnerId;
+    } else {
+      console.log(`Step 1: Getting ownerId for organization: ${TARGET_ORGANIZATION}`);
+      ownerId = await getOwnerId(TARGET_ORGANIZATION, TARGET_ADMIN_TOKEN);
+      console.log(`Owner ID: ${ownerId}`);
+    }
 
     // Step 2: Create migration source
     console.log('Step 2: Creating migration source');
