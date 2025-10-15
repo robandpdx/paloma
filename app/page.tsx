@@ -344,6 +344,8 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
                   {repository.lockSource && <li>Unlock the source repository</li>}
                   <li>Clear migration IDs</li>
                   <li>Reset the migration state</li>
+                  <li>Set repository visibility to private</li>
+                  <li>Clear lock source repository setting</li>
                 </ul>
               </div>
               <div className="modal-footer">
