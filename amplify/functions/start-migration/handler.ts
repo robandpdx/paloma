@@ -162,6 +162,14 @@ async function startRepositoryMigration(
   continueOnError: boolean = true,
   lockSource?: boolean
 ): Promise<StartRepositoryMigrationData> {
+  // Ensure targetRepoVisibility has a valid value
+  const visibility = targetRepoVisibility || 'private';
+  
+  console.log('startRepositoryMigration called with visibility:', {
+    rawValue: targetRepoVisibility,
+    finalValue: visibility
+  });
+  
   const mutation = `
     mutation startRepositoryMigration(
       $sourceId: ID!,
@@ -206,9 +214,15 @@ async function startRepositoryMigration(
     continueOnError,
     accessToken: sourceToken,
     githubPat: targetToken,
-    targetRepoVisibility,
+    targetRepoVisibility: visibility,
     lockSource,
   };
+
+  console.log('GraphQL mutation variables:', JSON.stringify({
+    ...variables,
+    accessToken: '[REDACTED]',
+    githubPat: '[REDACTED]'
+  }, null, 2));
 
   const response = await makeGraphQLRequest<StartRepositoryMigrationData>(mutation, variables, targetToken);
 
@@ -291,7 +305,12 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     console.log(`Migration Source ID: ${sourceId}`);
 
     // Step 3: Start repository migration
+    const targetVisibility = args.targetRepoVisibility || 'private';
     console.log('Step 3: Starting repository migration');
+    console.log('Repository visibility parameter:', {
+      received: args.targetRepoVisibility,
+      using: targetVisibility
+    });
     const migrationData = await startRepositoryMigration(
       sourceId,
       ownerId,
@@ -299,7 +318,7 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
       args.repositoryName,
       SOURCE_ADMIN_TOKEN,
       TARGET_ADMIN_TOKEN,
-      args.targetRepoVisibility || 'private',
+      targetVisibility,
       args.continueOnError !== undefined ? args.continueOnError : true,
       args.lockSource
     );

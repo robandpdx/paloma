@@ -528,6 +528,7 @@ export default function App() {
         id: repo.id,
         name: repo.repositoryName,
         visibility: repo.repositoryVisibility,
+        visibilityType: typeof repo.repositoryVisibility,
         lockSource: repo.lockSource
       });
 
