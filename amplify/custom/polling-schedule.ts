@@ -1,6 +1,7 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Rule, Schedule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { Stack } from 'aws-cdk-lib';
 
 /**
  * Creates an EventBridge rule to trigger the polling function on a schedule
@@ -15,13 +16,15 @@ export function addPollingSchedule(backend: ReturnType<typeof defineBackend>) {
 
   // Get the Lambda function resource
   const lambdaFunction = pollMigrationStatus.resources.lambda;
+  
+  // Get the stack from the Lambda function
+  const stack = Stack.of(lambdaFunction);
 
-  // Create EventBridge rule to run every 30 seconds
-  // Note: EventBridge minimum is 1 minute, so we'll use 1 minute intervals
-  const rule = new Rule(backend.stack, 'MigrationPollingSchedule', {
+  // Create EventBridge rule to run every 1 minute
+  // Note: EventBridge minimum is 1 minute
+  const rule = new Rule(stack, 'MigrationPollingSchedule', {
     schedule: Schedule.rate({ minutes: 1 }), // Poll every 1 minute
     description: 'Triggers migration status polling function',
-    ruleName: 'migration-polling-schedule',
   });
 
   // Add the Lambda function as a target

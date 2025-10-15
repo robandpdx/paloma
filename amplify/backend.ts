@@ -31,8 +31,5 @@ if (apiKey) {
   backend.pollMigrationStatus.addEnvironment('AMPLIFY_API_KEY', apiKey);
 }
 
-// Grant the polling function permission to read and update data
-backend.data.resources.cfnResources.cfnApiKey?.grantInvoke(backend.pollMigrationStatus.resources.lambda);
-
 // Add the EventBridge schedule for polling
 addPollingSchedule(backend);
