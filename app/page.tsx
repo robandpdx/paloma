@@ -197,6 +197,9 @@ function InfoModal({ repository, onClose }: InfoModalProps) {
                 </div>
               </>
             )}
+            
+            <div className="info-label">Lock source repository:</div>
+            <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
           </div>
         </div>
         <div className="modal-footer">
