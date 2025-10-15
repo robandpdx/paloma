@@ -83,10 +83,6 @@ export const data = defineData({
     apiKeyAuthorizationMode: {
       expiresInDays: 30,
     },
-    iamAuthorizationMode: {
-      authenticationType: "identityPool",
-      // Allows IAM-authenticated requests (e.g., from Lambda functions)
-    },
   },
 });
 
