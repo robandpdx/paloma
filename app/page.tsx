@@ -26,6 +26,48 @@ interface BulkSettingsModalProps {
   selectedCount: number;
 }
 
+interface ResetConfirmationModalProps {
+  onClose: () => void;
+  onConfirm: () => void;
+  repositoryCount: number;
+  hasLockedRepos?: boolean;
+}
+
+function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false }: ResetConfirmationModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Confirm Reset</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p>Are you sure you want to reset {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
+          <p className="form-help">This will:</p>
+          <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
+            <li>Delete the target repository if it exists</li>
+            {hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
+            {!hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
+            <li>Clear migration IDs</li>
+            <li>Reset the migration state</li>
+            <li>Set repository visibility to private</li>
+            <li>Clear lock source repository setting</li>
+          </ul>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button 
+            className="btn btn-danger" 
+            onClick={onConfirm}
+          >
+            Reset {repositoryCount > 1 ? 'Selected' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BulkSettingsModal({ onClose, onSave, selectedCount }: BulkSettingsModalProps) {
   const [lockSource, setLockSource] = useState(false);
   const [repositoryVisibility, setRepositoryVisibility] = useState("private");
@@ -396,35 +438,12 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
           </button>
         </div>
         {showResetConfirmation && (
-          <div className="modal-overlay" onClick={() => setShowResetConfirmation(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2 className="modal-title">Confirm Reset</h2>
-                <button className="modal-close" onClick={() => setShowResetConfirmation(false)}>×</button>
-              </div>
-              <div className="modal-body">
-                <p>Are you sure you want to reset this repository?</p>
-                <p className="form-help">This will:</p>
-                <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
-                  <li>Delete the target repository if it exists</li>
-                  {repository.lockSource && <li>Unlock the source repository</li>}
-                  <li>Clear migration IDs</li>
-                  <li>Reset the migration state</li>
-                  <li>Set repository visibility to private</li>
-                  <li>Clear lock source repository setting</li>
-                </ul>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-default" onClick={() => setShowResetConfirmation(false)}>Cancel</button>
-                <button 
-                  className="btn btn-danger" 
-                  onClick={handleReset}
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </div>
+          <ResetConfirmationModal
+            onClose={() => setShowResetConfirmation(false)}
+            onConfirm={handleReset}
+            repositoryCount={1}
+            hasLockedRepos={repository.lockSource || false}
+          />
         )}
       </div>
     </div>
@@ -479,6 +498,7 @@ export default function App() {
   const pollingReposRef = useRef<Set<string>>(new Set());
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
+  const [showBulkResetConfirmation, setShowBulkResetConfirmation] = useState(false);
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
 
   // Keep ref in sync with state
@@ -765,6 +785,13 @@ export default function App() {
       for (const line of dataLines) {
         const [sourceRepoUrl, repoVisibility, lockSourceStr] = line.split(',').map(s => s.trim());
         if (sourceRepoUrl) {
+          // Check if repository already exists in the database
+          const existingRepo = repositories.find(r => r.sourceRepositoryUrl === sourceRepoUrl);
+          if (existingRepo) {
+            console.log(`Skipping ${sourceRepoUrl} - already exists in database`);
+            continue;
+          }
+          
           // Extract repo name from URL
           const match = sourceRepoUrl.match(/github\.com\/[^\/]+\/([^\/]+)/);
           const repoName = match ? match[1].replace(/\.git$/, '') : '';
@@ -825,6 +852,8 @@ export default function App() {
     for (const repo of selectedRepoObjects) {
       await resetRepository(repo);
     }
+    
+    setShowBulkResetConfirmation(false);
   };
 
   const handleBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: string) => {
@@ -891,7 +920,7 @@ export default function App() {
             </button>
             <button 
               className="btn btn-danger" 
-              onClick={handleResetSelected}
+              onClick={() => setShowBulkResetConfirmation(true)}
               disabled={!canResetSelected || selectedRepos.size === 0}
               title={selectedRepos.size === 0 ? 'Select repositories to reset' : 'Reset selected migrations'}
             >
@@ -1020,6 +1049,15 @@ export default function App() {
           onClose={() => setShowBulkSettingsModal(false)}
           onSave={handleBulkSettingsUpdate}
           selectedCount={selectedRepos.size}
+        />
+      )}
+
+      {showBulkResetConfirmation && (
+        <ResetConfirmationModal
+          onClose={() => setShowBulkResetConfirmation(false)}
+          onConfirm={handleResetSelected}
+          repositoryCount={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').length}
+          hasLockedRepos={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').some(r => r.lockSource)}
         />
       )}
     </div>
