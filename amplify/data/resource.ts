@@ -22,6 +22,7 @@ const schema = a.schema({
     .authorization((allow) => [
       allow.publicApiKey(),
       allow.authenticated().to(['read', 'create', 'update', 'delete']),
+      allow.custom('iam').to(['read', 'update']),
     ]),
   
   // Migration function queries

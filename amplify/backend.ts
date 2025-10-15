@@ -24,19 +24,20 @@ const backend = defineBackend({
   pollMigrationStatus,
 });
 
-// Get the Lambda function and Data resources
+// Get the Lambda function
 const lambdaFunction = backend.pollMigrationStatus.resources.lambda;
-const dataResources = backend.data.resources;
-const graphqlApi = dataResources.graphqlApi;
+const region = process.env.AWS_REGION || Stack.of(lambdaFunction).region;
+const accountId = Stack.of(lambdaFunction).account;
 
 // Grant the Lambda function permission to query and mutate the AppSync API
+// Using wildcard resource to avoid circular dependency with data resource
 lambdaFunction.addToRolePolicy(
   new PolicyStatement({
     actions: [
       'appsync:GraphQL',
     ],
     resources: [
-      `${graphqlApi.arn}/*`,
+      `arn:aws:appsync:${region}:${accountId}:apis/*`,
     ],
   })
 );
