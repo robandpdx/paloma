@@ -7,7 +7,10 @@ import { getOwnerId } from './functions/get-owner-id/resource.js';
 import { deleteTargetRepo } from './functions/delete-target-repo/resource.js';
 import { unlockSourceRepo } from './functions/unlock-source-repo/resource.js';
 import { pollMigrationStatus } from './functions/poll-migration-status/resource.js';
-import { addPollingSchedule } from './custom/polling-schedule.js';
+import { Rule, Schedule } from 'aws-cdk-lib/aws-events';
+import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { Stack } from 'aws-cdk-lib';
+import { Duration } from 'aws-cdk-lib';
 
 const backend = defineBackend({
   auth,
@@ -32,4 +35,15 @@ if (apiKey) {
 }
 
 // Add the EventBridge schedule for polling
-addPollingSchedule(backend);
+// Get the Lambda function resource directly from the backend
+const lambdaFunction = backend.pollMigrationStatus.resources.lambda;
+const stack = Stack.of(lambdaFunction);
+
+// Create EventBridge rule to run every 1 minute
+const rule = new Rule(stack, 'MigrationPollingSchedule', {
+  schedule: Schedule.rate(Duration.minutes(1)),
+  description: 'Triggers migration status polling function',
+});
+
+// Add the Lambda function as a target
+rule.addTarget(new LambdaFunction(lambdaFunction));
