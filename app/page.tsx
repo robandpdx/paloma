@@ -273,7 +273,7 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
             className="btn btn-danger" 
             onClick={() => setShowResetConfirmation(true)}
             disabled={isResetDisabled}
-            title={isResetDisabled ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
+            aria-label={isResetDisabled ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
           >
             Reset
           </button>
