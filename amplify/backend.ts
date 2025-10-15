@@ -46,18 +46,21 @@ lambdaFunction.addToRolePolicy(
 // Set the GraphQL endpoint as an environment variable using the CloudFormation-level construct
 // This avoids circular dependency by setting it directly on the CFN resource
 const cfnFunction = lambdaFunction.node.defaultChild as CfnFunction;
-if (cfnFunction.environment) {
-  cfnFunction.environment.variables = {
-    ...cfnFunction.environment.variables,
+
+// Get existing environment variables if they exist
+const existingVars = cfnFunction.environment && 
+  typeof cfnFunction.environment === 'object' && 
+  'variables' in cfnFunction.environment
+  ? cfnFunction.environment.variables
+  : undefined;
+
+// Set the environment with the new variable
+cfnFunction.environment = {
+  variables: {
+    ...(existingVars || {}),
     AMPLIFY_DATA_ENDPOINT: apiEndpoint,
-  };
-} else {
-  cfnFunction.environment = {
-    variables: {
-      AMPLIFY_DATA_ENDPOINT: apiEndpoint,
-    },
-  };
-}
+  },
+};
 
 // Add the EventBridge schedule for polling
 const stack = Stack.of(lambdaFunction);
