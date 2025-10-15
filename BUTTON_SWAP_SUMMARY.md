@@ -30,10 +30,10 @@ This document summarizes the changes made to swap the positions of the Reset and
 
 ### 1. Reset Button (Moved to Main Page)
 - **Location**: Now in repository actions area on the main page
-- **Behavior**: Directly calls `resetRepository(repo)` when clicked
+- **Behavior**: Shows ResetConfirmationModal when clicked, then calls `resetRepository(repo)` on confirm
 - **Disabled State**: Disabled when repository state is 'pending' or 'reset'
 - **Accessibility**: Includes title and aria-label attributes with descriptive text
-- **No Confirmation Modal**: The reset button on the main page directly executes the reset operation (previously it showed a confirmation modal when in the Settings modal)
+- **Confirmation Modal**: Shows a confirmation dialog explaining what will be reset before executing
 
 ### 2. Delete Button (Moved to Settings Modal)
 - **Location**: Now in the footer of the Repository Settings modal
@@ -50,12 +50,11 @@ This document summarizes the changes made to swap the positions of the Reset and
 
 ## Technical Notes
 
-### Reset Button Behavior Change
-The Reset button behavior has changed slightly:
-- **Previously**: In Settings modal, clicking Reset showed a confirmation modal with details about what would be reset
-- **Now**: On main page, clicking Reset directly executes the reset operation without a confirmation modal
-
-This change aligns the Reset button with the existing pattern of other action buttons on the main page (like Start Migration), which execute immediately without confirmation modals.
+### Reset Button Behavior
+The Reset button maintains its confirmation behavior:
+- **Confirmation Required**: Shows ResetConfirmationModal with details about what will be reset
+- **Modal Content**: Explains that it will delete target repo, unlock source repo if locked, clear migration IDs, reset state, set visibility to private, and clear lock source setting
+- **User Action**: User must click "Reset" button in the modal to confirm
 
 ### Delete Button Behavior
 The Delete button maintains its original behavior:

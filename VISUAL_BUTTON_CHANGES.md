@@ -73,7 +73,8 @@ When clicking [⚙️ Settings]:
 ### Reset Button (Now on Main Page)
 - **Disabled State**: Cannot reset repositories in 'pending' or 'reset' state
 - **Tooltip**: Shows explanatory message when disabled
-- **Action**: Directly executes reset operation (no confirmation modal)
+- **Action**: Shows ResetConfirmationModal, then executes reset operation on confirmation
+- **Confirmation Modal**: Displays what will be reset before executing
 - **What it does**:
   - Deletes target repository if it exists
   - Unlocks source repository if it was locked

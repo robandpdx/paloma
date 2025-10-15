@@ -489,6 +489,7 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
+  const [resetRepo, setResetRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
   const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
   const pollingReposRef = useRef<Set<string>>(new Set());
@@ -983,7 +984,7 @@ export default function App() {
                   </button>
                   <button 
                     className="btn btn-danger btn-sm"
-                    onClick={() => resetRepository(repo)}
+                    onClick={() => setResetRepo(repo)}
                     disabled={repo.state === 'pending' || repo.state === 'reset'}
                     title={repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
                     aria-label={repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
@@ -1039,6 +1040,18 @@ export default function App() {
           onClose={() => setShowBulkSettingsModal(false)}
           onSave={handleBulkSettingsUpdate}
           selectedCount={selectedRepos.size}
+        />
+      )}
+
+      {resetRepo && (
+        <ResetConfirmationModal
+          onClose={() => setResetRepo(null)}
+          onConfirm={() => {
+            resetRepository(resetRepo);
+            setResetRepo(null);
+          }}
+          repositoryCount={1}
+          hasLockedRepos={resetRepo.lockSource || false}
         />
       )}
 
