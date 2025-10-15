@@ -24,13 +24,20 @@ const backend = defineBackend({
   pollMigrationStatus,
 });
 
-// Grant the polling function access to query and mutate data
-backend.data.resources.graphqlApi.grantQuery(backend.pollMigrationStatus.resources.lambda, 'listRepositoryMigrations', 'getRepositoryMigration');
-backend.data.resources.graphqlApi.grantMutation(backend.pollMigrationStatus.resources.lambda, 'updateRepositoryMigration');
-
 // Get the Lambda function for EventBridge setup
 const lambdaFunction = backend.pollMigrationStatus.resources.lambda;
-const region = process.env.AWS_REGION || Stack.of(lambdaFunction).region;
+const stack = Stack.of(lambdaFunction);
+const region = stack.region;
+const accountId = stack.account;
+
+// Grant AppSync permissions with wildcard ARN (avoids circular dependency)
+// This allows the Lambda to execute GraphQL queries and mutations on ANY AppSync API in this account
+lambdaFunction.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['appsync:GraphQL'],
+    resources: [`arn:aws:appsync:${region}:${accountId}:apis/*/types/Query/*`, `arn:aws:appsync:${region}:${accountId}:apis/*/types/Mutation/*`],
+  })
+);
 
 // Grant permission to list GraphQL APIs (needed to discover the endpoint at runtime)
 lambdaFunction.addToRolePolicy(
@@ -42,9 +49,6 @@ lambdaFunction.addToRolePolicy(
     resources: ['*'],
   })
 );
-
-// Add the EventBridge schedule for polling
-const stack = Stack.of(lambdaFunction);
 
 // Create EventBridge rule to run every 1 minute
 const rule = new Rule(stack, 'MigrationPollingSchedule', {
