@@ -339,16 +339,15 @@ interface SettingsModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
   onUpdate: (lockSource: boolean, repositoryVisibility: string) => void;
-  onReset: () => void;
+  onDelete: () => void;
 }
 
-function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModalProps) {
+function SettingsModal({ repository, onClose, onUpdate, onDelete }: SettingsModalProps) {
   const [lockSource, setLockSource] = useState(repository.lockSource || false);
   const [repositoryVisibility, setRepositoryVisibility] = useState(repository.repositoryVisibility || 'private');
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
-  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
-  const isResetDisabled = repository.state === 'pending' || repository.state === 'reset';
   const isSettingsEditable = repository.state === 'pending' || repository.state === 'reset';
 
   // Sync local state with repository prop when it changes
@@ -371,9 +370,9 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
     setTimeout(() => setShowSaveConfirmation(false), 2000);
   };
 
-  const handleReset = () => {
-    setShowResetConfirmation(false);
-    onReset();
+  const handleDelete = () => {
+    setShowDeleteConfirmation(false);
+    onDelete();
     onClose();
   };
 
@@ -429,20 +428,18 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
         <div className="modal-footer">
           <button 
             className="btn btn-danger" 
-            onClick={() => setShowResetConfirmation(true)}
-            disabled={isResetDisabled}
-            title={isResetDisabled ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
-            aria-label={isResetDisabled ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
+            onClick={() => setShowDeleteConfirmation(true)}
+            title="Delete this repository"
+            aria-label="Delete this repository"
           >
-            Reset
+            Delete
           </button>
         </div>
-        {showResetConfirmation && (
-          <ResetConfirmationModal
-            onClose={() => setShowResetConfirmation(false)}
-            onConfirm={handleReset}
-            repositoryCount={1}
-            hasLockedRepos={repository.lockSource || false}
+        {showDeleteConfirmation && (
+          <DeleteModal
+            repository={repository}
+            onClose={() => setShowDeleteConfirmation(false)}
+            onDelete={handleDelete}
           />
         )}
       </div>
@@ -490,7 +487,6 @@ export default function App() {
   const { signOut } = useAuthenticator();
   const [repositories, setRepositories] = useState<RepositoryMigration[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [deleteRepo, setDeleteRepo] = useState<RepositoryMigration | null>(null);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
@@ -552,7 +548,6 @@ export default function App() {
 
   const deleteRepository = async (id: string) => {
     await client.models.RepositoryMigration.delete({ id });
-    setDeleteRepo(null);
   };
 
   const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: string) => {
@@ -988,9 +983,12 @@ export default function App() {
                   </button>
                   <button 
                     className="btn btn-danger btn-sm"
-                    onClick={() => setDeleteRepo(repo)}
+                    onClick={() => resetRepository(repo)}
+                    disabled={repo.state === 'pending' || repo.state === 'reset'}
+                    title={repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
+                    aria-label={repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
                   >
-                    Delete
+                    Reset
                   </button>
                   <button 
                     className="btn btn-default btn-sm btn-icon"
@@ -1013,14 +1011,6 @@ export default function App() {
         />
       )}
 
-      {deleteRepo && (
-        <DeleteModal
-          repository={deleteRepo}
-          onClose={() => setDeleteRepo(null)}
-          onDelete={() => deleteRepository(deleteRepo.id)}
-        />
-      )}
-
       {infoRepo && (
         <InfoModal
           repository={infoRepo}
@@ -1033,7 +1023,7 @@ export default function App() {
           repository={settingsRepo}
           onClose={() => setSettingsRepo(null)}
           onUpdate={(lockSource, repositoryVisibility) => updateRepositorySettings(settingsRepo, lockSource, repositoryVisibility)}
-          onReset={() => resetRepository(settingsRepo)}
+          onDelete={() => deleteRepository(settingsRepo.id)}
         />
       )}
 
