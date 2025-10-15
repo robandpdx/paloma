@@ -20,6 +20,72 @@ interface AddRepoModalProps {
   onAdd: (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => void;
 }
 
+interface BulkSettingsModalProps {
+  onClose: () => void;
+  onSave: (lockSource: boolean, repositoryVisibility: string) => void;
+  selectedCount: number;
+}
+
+function BulkSettingsModal({ onClose, onSave, selectedCount }: BulkSettingsModalProps) {
+  const [lockSource, setLockSource] = useState(false);
+  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
+
+  const handleSave = () => {
+    onSave(lockSource, repositoryVisibility);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Bulk Update Settings</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p className="form-help" style={{ marginBottom: '16px' }}>
+            Update settings for {selectedCount} selected {selectedCount === 1 ? 'repository' : 'repositories'}
+          </p>
+          <div className="form-group">
+            <label className="form-label">Repository Visibility</label>
+            <select
+              className="form-input"
+              value={repositoryVisibility}
+              onChange={(e) => setRepositoryVisibility(e.target.value)}
+            >
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+              <option value="internal">Internal</option>
+            </select>
+            <div className="form-help">Select the visibility for the migrated repositories</div>
+          </div>
+          <div className="form-group">
+            <label className="form-checkbox-wrapper">
+              <input
+                type="checkbox"
+                className="form-checkbox"
+                checked={lockSource}
+                onChange={(e) => setLockSource(e.target.checked)}
+              />
+              <span className="form-checkbox-label">Lock source repository</span>
+            </label>
+            <div className="form-help">Lock the source repositories during migration to prevent modifications</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleSave}
+          >
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddRepoModal({ onClose, onAdd }: AddRepoModalProps) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
@@ -411,6 +477,8 @@ export default function App() {
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
   const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
   const pollingReposRef = useRef<Set<string>>(new Set());
+  const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+  const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
 
   // Keep ref in sync with state
@@ -681,6 +749,109 @@ export default function App() {
     }
   };
 
+  // CSV handling
+  const handleCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      // Skip header line if it exists
+      const dataLines = lines[0].toLowerCase().includes('source_repo_url') ? lines.slice(1) : lines;
+      
+      for (const line of dataLines) {
+        const [sourceRepoUrl, repoVisibility, lockSourceStr] = line.split(',').map(s => s.trim());
+        if (sourceRepoUrl) {
+          // Extract repo name from URL
+          const match = sourceRepoUrl.match(/github\.com\/[^\/]+\/([^\/]+)/);
+          const repoName = match ? match[1].replace(/\.git$/, '') : '';
+          
+          if (repoName) {
+            const lockSource = lockSourceStr?.toLowerCase() === 'true';
+            const visibility = repoVisibility || 'private';
+            
+            await client.models.RepositoryMigration.create({
+              sourceRepositoryUrl: sourceRepoUrl,
+              repositoryName: repoName,
+              state: 'pending',
+              lockSource,
+              repositoryVisibility: visibility,
+            });
+          }
+        }
+      }
+    };
+    reader.readAsText(file);
+    // Reset the input so the same file can be uploaded again
+    event.target.value = '';
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedRepos(new Set(repositories.map(r => r.id)));
+    } else {
+      setSelectedRepos(new Set());
+    }
+  };
+
+  const handleSelectRepo = (repoId: string, checked: boolean) => {
+    const newSelected = new Set(selectedRepos);
+    if (checked) {
+      newSelected.add(repoId);
+    } else {
+      newSelected.delete(repoId);
+    }
+    setSelectedRepos(newSelected);
+  };
+
+  const handleStartSelected = async () => {
+    const selectedRepoObjects = repositories.filter(r => 
+      selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset')
+    );
+    
+    for (const repo of selectedRepoObjects) {
+      await startMigration(repo);
+    }
+  };
+
+  const handleResetSelected = async () => {
+    const selectedRepoObjects = repositories.filter(r => 
+      selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset'
+    );
+    
+    for (const repo of selectedRepoObjects) {
+      await resetRepository(repo);
+    }
+  };
+
+  const handleBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: string) => {
+    const selectedRepoObjects = repositories.filter(r => 
+      selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset')
+    );
+    
+    for (const repo of selectedRepoObjects) {
+      await updateRepositorySettings(repo, lockSource, repositoryVisibility);
+    }
+  };
+
+  const canStartSelected = Array.from(selectedRepos).some(id => {
+    const repo = repositories.find(r => r.id === id);
+    return repo && (repo.state === 'pending' || repo.state === 'reset');
+  });
+
+  const canResetSelected = Array.from(selectedRepos).some(id => {
+    const repo = repositories.find(r => r.id === id);
+    return repo && repo.state !== 'pending' && repo.state !== 'reset';
+  });
+
+  const canUpdateSettings = Array.from(selectedRepos).some(id => {
+    const repo = repositories.find(r => r.id === id);
+    return repo && (repo.state === 'pending' || repo.state === 'reset');
+  });
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -699,9 +870,45 @@ export default function App() {
       <div className="repository-list">
         <div className="repository-list-header">
           <h2 className="repository-list-title">Repositories</h2>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            Add Repository
-          </button>
+          <div className="repository-list-actions">
+            <input
+              type="file"
+              accept=".csv"
+              style={{ display: 'none' }}
+              id="csv-upload"
+              onChange={handleCSVUpload}
+            />
+            <label htmlFor="csv-upload" className="btn btn-default">
+              Load CSV File
+            </label>
+            <button 
+              className="btn btn-primary" 
+              onClick={handleStartSelected}
+              disabled={!canStartSelected || selectedRepos.size === 0}
+              title={selectedRepos.size === 0 ? 'Select repositories to start' : 'Start selected migrations'}
+            >
+              Start selected
+            </button>
+            <button 
+              className="btn btn-danger" 
+              onClick={handleResetSelected}
+              disabled={!canResetSelected || selectedRepos.size === 0}
+              title={selectedRepos.size === 0 ? 'Select repositories to reset' : 'Reset selected migrations'}
+            >
+              Reset selected
+            </button>
+            <button 
+              className="btn btn-default btn-icon" 
+              onClick={() => setShowBulkSettingsModal(true)}
+              disabled={!canUpdateSettings || selectedRepos.size === 0}
+              title={selectedRepos.size === 0 ? 'Select repositories to update settings' : 'Update settings for selected'}
+            >
+              ⚙️
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+              Add Repository
+            </button>
+          </div>
         </div>
 
         {repositories.length === 0 ? (
@@ -709,42 +916,64 @@ export default function App() {
             <div className="empty-state-icon">📦</div>
             <h3 className="empty-state-title">No repositories yet</h3>
             <p className="empty-state-description">
-              Get started by adding a repository to migrate
+              Get started by adding a repository to migrate or load a CSV file
             </p>
             <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
               Add Your First Repository
             </button>
           </div>
         ) : (
-          repositories.map((repo) => (
-            <div key={repo.id} className="repository-item">
-              <div className="repository-info">
-                <div className="repository-name">{repo.repositoryName}</div>
-                <div className="repository-url">{repo.sourceRepositoryUrl}</div>
+          <>
+            <div className="repository-table-header">
+              <div className="repository-checkbox-cell">
+                <input
+                  type="checkbox"
+                  checked={selectedRepos.size === repositories.length && repositories.length > 0}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                  aria-label="Select all repositories"
+                />
               </div>
-              <div className="repository-actions">
-                <button 
-                  className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
-                  onClick={() => handleStatusButtonClick(repo)}
-                >
-                  {getStatusButtonText(repo.state)}
-                </button>
-                <button 
-                  className="btn btn-danger btn-sm"
-                  onClick={() => setDeleteRepo(repo)}
-                >
-                  Delete
-                </button>
-                <button 
-                  className="btn btn-default btn-sm btn-icon"
-                  onClick={() => setSettingsRepo(repo)}
-                  title="Repository settings"
-                >
-                  ⚙️
-                </button>
-              </div>
+              <div className="repository-info-header">Repository</div>
+              <div className="repository-actions-header">Actions</div>
             </div>
-          ))
+            {repositories.map((repo) => (
+              <div key={repo.id} className="repository-item">
+                <div className="repository-checkbox-cell">
+                  <input
+                    type="checkbox"
+                    checked={selectedRepos.has(repo.id)}
+                    onChange={(e) => handleSelectRepo(repo.id, e.target.checked)}
+                    aria-label={`Select ${repo.repositoryName}`}
+                  />
+                </div>
+                <div className="repository-info">
+                  <div className="repository-name">{repo.repositoryName}</div>
+                  <div className="repository-url">{repo.sourceRepositoryUrl}</div>
+                </div>
+                <div className="repository-actions">
+                  <button 
+                    className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
+                    onClick={() => handleStatusButtonClick(repo)}
+                  >
+                    {getStatusButtonText(repo.state)}
+                  </button>
+                  <button 
+                    className="btn btn-danger btn-sm"
+                    onClick={() => setDeleteRepo(repo)}
+                  >
+                    Delete
+                  </button>
+                  <button 
+                    className="btn btn-default btn-sm btn-icon"
+                    onClick={() => setSettingsRepo(repo)}
+                    title="Repository settings"
+                  >
+                    ⚙️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
@@ -783,6 +1012,14 @@ export default function App() {
         <FailureModal
           failureReason={failureInfo}
           onClose={() => setFailureInfo(null)}
+        />
+      )}
+
+      {showBulkSettingsModal && (
+        <BulkSettingsModal
+          onClose={() => setShowBulkSettingsModal(false)}
+          onSave={handleBulkSettingsUpdate}
+          selectedCount={selectedRepos.size}
         />
       )}
     </div>
