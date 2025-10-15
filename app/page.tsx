@@ -243,6 +243,12 @@ function SettingsModal({ repository, onClose, onUpdate, onReset }: SettingsModal
   const isResetDisabled = repository.state === 'pending' || repository.state === 'reset';
   const isSettingsEditable = repository.state === 'pending' || repository.state === 'reset';
 
+  // Sync local state with repository prop when it changes
+  useEffect(() => {
+    setLockSource(repository.lockSource || false);
+    setRepositoryVisibility(repository.repositoryVisibility || 'private');
+  }, [repository.lockSource, repository.repositoryVisibility]);
+
   const handleCheckboxChange = async (checked: boolean) => {
     setLockSource(checked);
     await onUpdate(checked, repositoryVisibility);
@@ -508,6 +514,13 @@ export default function App() {
 
   const startMigration = async (repo: RepositoryMigration) => {
     try {
+      console.log('Starting migration for repository:', {
+        id: repo.id,
+        name: repo.repositoryName,
+        visibility: repo.repositoryVisibility,
+        lockSource: repo.lockSource
+      });
+
       // Update state to in_progress
       await client.models.RepositoryMigration.update({
         id: repo.id,
