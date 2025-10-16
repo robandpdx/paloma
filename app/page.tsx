@@ -237,7 +237,7 @@ function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, 
             </select>
             <div className="form-help">
               {!isSettingsEditable 
-                ? 'This setting cannot be changed for repositories that have started or completed migration'
+                ? 'This setting cannot be changed after migration has started or been completed'
                 : 'Select the visibility for the target repositories'}
             </div>
           </div>
@@ -254,7 +254,7 @@ function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, 
             </label>
             <div className="form-help">
               {!isSettingsEditable 
-                ? 'This setting cannot be changed for repositories that have started or completed migration'
+                ? 'This setting cannot be changed after migration has started'
                 : 'Lock the source repositories during migration to prevent modifications'}
             </div>
           </div>
