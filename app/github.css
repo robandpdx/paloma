@@ -195,6 +195,17 @@ body {
   background-color: #0860ca;
 }
 
+.btn-warning {
+  color: #1f2328;
+  background-color: #fbbf24;
+  border-color: rgba(31, 35, 40, 0.15);
+  box-shadow: var(--color-btn-shadow);
+}
+
+.btn-warning:hover:not(:disabled) {
+  background-color: #f59e0b;
+}
+
 .btn-default {
   color: var(--color-fg-default);
   background-color: var(--color-btn-bg);

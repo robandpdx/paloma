@@ -19,6 +19,7 @@ const schema = a.schema({
       failureReason: a.string(),
       lockSource: a.boolean(), // Whether to lock the source repository during migration
       repositoryVisibility: a.string(), // 'private', 'public', or 'internal'
+      archived: a.boolean(), // Whether the repository is archived
     })
     .authorization((allow) => [allow.publicApiKey()]),
   
