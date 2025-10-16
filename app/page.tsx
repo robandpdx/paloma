@@ -42,6 +42,13 @@ interface ScanOrgModalProps {
   onScan: (orgName: string, repositoryVisibility: string, lockSource: boolean) => void;
 }
 
+interface EnvironmentInfoModalProps {
+  onClose: () => void;
+  sourceDescription: string;
+  targetDescription: string;
+  targetOrganization: string;
+}
+
 function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false }: ResetConfirmationModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -71,6 +78,31 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
           >
             Reset {repositoryCount > 1 ? 'Selected' : ''}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, targetOrganization }: EnvironmentInfoModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Environment Information</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="info-grid">
+            <div className="info-label">Source Description:</div>
+            <div className="info-value">{sourceDescription}</div>
+            
+            <div className="info-label">Target Description:</div>
+            <div className="info-value">{targetDescription}</div>
+            
+            <div className="info-label">Target Organization:</div>
+            <div className="info-value">{targetOrganization}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -683,6 +715,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [showArchiveView, setShowArchiveView] = useState(false);
+  const [showEnvironmentInfoModal, setShowEnvironmentInfoModal] = useState(false);
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
   const targetDescription = process.env.NEXT_PUBLIC_TARGET_DESCRIPTION || 'Not configured';
   const sourceDescription = process.env.NEXT_PUBLIC_SOURCE_DESCRIPTION || 'Not configured';
@@ -1206,10 +1239,6 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1 className="app-title">GitHub Repository Migration</h1>
-          <div className="target-org-info">
-            <span className="target-org-label">Target Organization:</span>
-            <span className="target-org-value">{targetOrganization}</span>
-          </div>
         </div>
         <button className="btn btn-default sign-out-btn" onClick={signOut}>
           Sign out
@@ -1218,7 +1247,17 @@ export default function App() {
 
       <div className="repository-list">
         <div className="repository-list-header">
-          <h2 className="repository-list-title">Repositories</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h2 className="repository-list-title">Repositories</h2>
+            <button 
+              className="btn btn-default btn-sm btn-icon" 
+              onClick={() => setShowEnvironmentInfoModal(true)}
+              title="View environment information"
+              aria-label="View environment information"
+            >
+              ℹ️
+            </button>
+          </div>
           <div className="repository-list-actions">
             {!showArchiveView ? (
               <>
@@ -1530,6 +1569,15 @@ export default function App() {
           onClose={() => setShowDeleteSelectedConfirmation(false)}
           onConfirm={handleDeleteSelected}
           repositoryCount={repositories.filter(r => selectedRepos.has(r.id)).length}
+        />
+      )}
+
+      {showEnvironmentInfoModal && (
+        <EnvironmentInfoModal
+          onClose={() => setShowEnvironmentInfoModal(false)}
+          sourceDescription={sourceDescription}
+          targetDescription={targetDescription}
+          targetOrganization={targetOrganization}
         />
       )}
     </div>
