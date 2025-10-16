@@ -458,25 +458,25 @@ function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }
     onClose();
   };
 
-  const handleOverlayClick = () => {
+  const handleClose = () => {
     if (!isDeleting) {
       onClose();
     }
   };
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Confirm Delete</h2>
-          <button className="modal-close" onClick={onClose} disabled={isDeleting}>×</button>
+          <button className="modal-close" onClick={handleClose} disabled={isDeleting}>×</button>
         </div>
         <div className="modal-body">
           <p>Are you sure you want to delete {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
           <p className="form-help">This action cannot be undone.</p>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose} disabled={isDeleting}>Cancel</button>
+          <button className="btn btn-default" onClick={handleClose} disabled={isDeleting}>Cancel</button>
           <button 
             className="btn btn-danger" 
             onClick={handleDelete}
