@@ -321,3 +321,5 @@ const client = generateClient<Schema>()
 client.queries.sayHello({
   name: "Amplify",
 })
+
+Put all documentation produced by Copilot in docs/ directory.

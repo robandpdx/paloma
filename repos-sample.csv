@@ -1,0 +1,4 @@
+source_repo_url,repo_visibility,lock_source_repo
+https://github.com/mindfulrob/java-private-library,private,false
+https://github.com/mindfulrob/mindful-test,internal,true
+https://github.com/mindfulrob/jenkins-vm,private,true
