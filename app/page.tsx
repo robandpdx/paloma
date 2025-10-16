@@ -28,6 +28,7 @@ interface BulkSettingsModalProps {
   onDeleteSelected: () => void;
   isArchiveView: boolean;
   onShowDeleteConfirmation: () => void;
+  selectedRepositories: RepositoryMigration[];
 }
 
 interface ResetConfirmationModalProps {
@@ -186,9 +187,15 @@ function ScanOrgModal({ onClose, onScan }: ScanOrgModalProps) {
   );
 }
 
-function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, onDeleteSelected, isArchiveView, onShowDeleteConfirmation }: BulkSettingsModalProps) {
+function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, onDeleteSelected, isArchiveView, onShowDeleteConfirmation, selectedRepositories }: BulkSettingsModalProps) {
   const [lockSource, setLockSource] = useState(false);
   const [repositoryVisibility, setRepositoryVisibility] = useState("private");
+
+  // Check if any selected repositories are in a non-editable state
+  const hasNonEditableRepos = selectedRepositories.some(
+    repo => repo.state !== 'pending' && repo.state !== 'reset'
+  );
+  const isSettingsEditable = !hasNonEditableRepos;
 
   const handleSave = () => {
     onSave(lockSource, repositoryVisibility);
@@ -222,12 +229,17 @@ function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, 
               className="form-input"
               value={repositoryVisibility}
               onChange={(e) => setRepositoryVisibility(e.target.value)}
+              disabled={!isSettingsEditable}
             >
               <option value="private">Private</option>
               <option value="public">Public</option>
               <option value="internal">Internal</option>
             </select>
-            <div className="form-help">Select the visibility for the target repositories</div>
+            <div className="form-help">
+              {!isSettingsEditable 
+                ? 'This setting cannot be changed after migration has started or been completed'
+                : 'Select the visibility for the target repositories'}
+            </div>
           </div>
           <div className="form-group">
             <label className="form-checkbox-wrapper">
@@ -236,10 +248,15 @@ function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, 
                 className="form-checkbox"
                 checked={lockSource}
                 onChange={(e) => setLockSource(e.target.checked)}
+                disabled={!isSettingsEditable}
               />
               <span className="form-checkbox-label">Lock source repository</span>
             </label>
-            <div className="form-help">Lock the source repositories during migration to prevent modifications</div>
+            <div className="form-help">
+              {!isSettingsEditable 
+                ? 'This setting cannot be changed after migration has started'
+                : 'Lock the source repositories during migration to prevent modifications'}
+            </div>
           </div>
         </div>
         <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
@@ -264,6 +281,7 @@ function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, 
             <button 
               className="btn btn-primary" 
               onClick={handleSave}
+              disabled={!isSettingsEditable}
             >
               Save Settings
             </button>
@@ -1204,7 +1222,7 @@ export default function App() {
 
   const canUpdateSettings = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
-    return repo && (repo.state === 'pending' || repo.state === 'reset');
+    return repo && (repo.state === 'pending' || repo.state === 'reset' || repo.state === 'completed');
   });
 
   // Pagination logic
@@ -1533,6 +1551,7 @@ export default function App() {
           onDeleteSelected={handleDeleteSelected}
           isArchiveView={showArchiveView}
           onShowDeleteConfirmation={() => setShowDeleteSelectedConfirmation(true)}
+          selectedRepositories={repositories.filter(r => selectedRepos.has(r.id))}
         />
       )}
 
