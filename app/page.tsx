@@ -181,7 +181,7 @@ function BulkSettingsModal({ onClose, onSave, selectedCount }: BulkSettingsModal
               <option value="public">Public</option>
               <option value="internal">Internal</option>
             </select>
-            <div className="form-help">Select the visibility for the migrated repositories</div>
+            <div className="form-help">Select the visibility for the target repositories</div>
           </div>
           <div className="form-group">
             <label className="form-checkbox-wrapper">
