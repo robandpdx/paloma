@@ -1204,7 +1204,7 @@ export default function App() {
 
   const canUpdateSettings = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
-    return repo && (repo.state === 'pending' || repo.state === 'reset');
+    return repo && (repo.state === 'pending' || repo.state === 'reset' || repo.state === 'completed');
   });
 
   // Pagination logic
