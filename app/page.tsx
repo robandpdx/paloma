@@ -27,6 +27,7 @@ interface BulkSettingsModalProps {
   onArchiveSelected: () => void;
   onDeleteSelected: () => void;
   isArchiveView: boolean;
+  onShowDeleteConfirmation: () => void;
 }
 
 interface ResetConfirmationModalProps {
@@ -153,7 +154,7 @@ function ScanOrgModal({ onClose, onScan }: ScanOrgModalProps) {
   );
 }
 
-function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, onDeleteSelected, isArchiveView }: BulkSettingsModalProps) {
+function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, onDeleteSelected, isArchiveView, onShowDeleteConfirmation }: BulkSettingsModalProps) {
   const [lockSource, setLockSource] = useState(false);
   const [repositoryVisibility, setRepositoryVisibility] = useState("private");
 
@@ -168,8 +169,8 @@ function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, 
   };
 
   const handleDeleteSelected = () => {
-    onDeleteSelected();
     onClose();
+    onShowDeleteConfirmation();
   };
 
   return (
@@ -384,6 +385,38 @@ function DeleteModal({ repository, onClose, onDelete }: DeleteModalProps) {
             disabled={!isConfirmed}
           >
             Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface DeleteSelectedConfirmationModalProps {
+  onClose: () => void;
+  onConfirm: () => void;
+  repositoryCount: number;
+}
+
+function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }: DeleteSelectedConfirmationModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Confirm Delete</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p>Are you sure you want to delete {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
+          <p className="form-help">This action cannot be undone.</p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button 
+            className="btn btn-danger" 
+            onClick={onConfirm}
+          >
+            Delete {repositoryCount > 1 ? 'Selected' : ''}
           </button>
         </div>
       </div>
@@ -646,6 +679,7 @@ export default function App() {
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
   const [showBulkResetConfirmation, setShowBulkResetConfirmation] = useState(false);
+  const [showDeleteSelectedConfirmation, setShowDeleteSelectedConfirmation] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [showArchiveView, setShowArchiveView] = useState(false);
@@ -1120,6 +1154,7 @@ export default function App() {
     }
     
     setSelectedRepos(new Set());
+    setShowDeleteSelectedConfirmation(false);
   };
 
   const canStartSelected = Array.from(selectedRepos).some(id => {
@@ -1340,66 +1375,80 @@ export default function App() {
         )}
       </div>
 
-      {filteredRepositories.length > 0 && (
-        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-                Per page:
-              </label>
-              <select
-                id="per-page-select"
-                value={perPage}
-                onChange={(e) => handlePerPageChange(Number(e.target.value))}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '14px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--color-border-default)',
-                  backgroundColor: 'var(--color-canvas-default)',
-                  color: 'var(--color-fg-default)',
-                }}
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-            <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-              Showing {filteredRepositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, filteredRepositories.length)} of {filteredRepositories.length} repositories
-            </span>
-            {totalPages > 1 && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  className="btn btn-default btn-sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </button>
+      {repositories.length > 0 && (
+        <>
+          {filteredRepositories.length > 0 && (
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                    Per page:
+                  </label>
+                  <select
+                    id="per-page-select"
+                    value={perPage}
+                    onChange={(e) => handlePerPageChange(Number(e.target.value))}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--color-border-default)',
+                      backgroundColor: 'var(--color-canvas-default)',
+                      color: 'var(--color-fg-default)',
+                    }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
                 <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-                  Page {currentPage} of {totalPages}
+                  Showing {filteredRepositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, filteredRepositories.length)} of {filteredRepositories.length} repositories
                 </span>
-                <button
-                  className="btn btn-default btn-sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </button>
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      className="btn btn-default btn-sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      className="btn btn-default btn-sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <button
-            className="btn btn-default btn-sm"
-            onClick={() => setShowArchiveView(!showArchiveView)}
-            style={{ marginLeft: 'auto' }}
-          >
-            {showArchiveView ? 'Show Main' : 'Show Archive'}
-          </button>
-        </div>
+              <button
+                className="btn btn-default btn-sm"
+                onClick={() => setShowArchiveView(!showArchiveView)}
+                style={{ marginLeft: 'auto' }}
+              >
+                {showArchiveView ? 'Show Main' : 'Show Archive'}
+              </button>
+            </div>
+          )}
+          {filteredRepositories.length === 0 && (
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-default btn-sm"
+                onClick={() => setShowArchiveView(!showArchiveView)}
+              >
+                {showArchiveView ? 'Show Main' : 'Show Archive'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {showAddModal && (
@@ -1442,6 +1491,7 @@ export default function App() {
           onArchiveSelected={handleArchiveSelected}
           onDeleteSelected={handleDeleteSelected}
           isArchiveView={showArchiveView}
+          onShowDeleteConfirmation={() => setShowDeleteSelectedConfirmation(true)}
         />
       )}
 
@@ -1470,6 +1520,14 @@ export default function App() {
         <ScanOrgModal
           onClose={() => setShowScanOrgModal(false)}
           onScan={handleScanOrg}
+        />
+      )}
+
+      {showDeleteSelectedConfirmation && (
+        <DeleteSelectedConfirmationModal
+          onClose={() => setShowDeleteSelectedConfirmation(false)}
+          onConfirm={handleDeleteSelected}
+          repositoryCount={repositories.filter(r => selectedRepos.has(r.id)).length}
         />
       )}
     </div>
