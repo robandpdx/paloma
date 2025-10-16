@@ -21,6 +21,12 @@ Parameters:
   TargetAdminToken:
     Type: String
     Description: The admin token for the target organization.
+  SourceDescription:
+    Type: String
+    Description: Description of the migration source.
+  TargetDescription:
+    Type: String
+    Description: Description of the migration target.
   Owner:
     Type: String
     Description: The owner of the AWS resources.
@@ -102,6 +108,10 @@ Resources:
           Value: !Ref SourceAdminToken
         - Name: TARGET_ADMIN_TOKEN
           Value: !Ref TargetAdminToken
+        - Name: SOURCE_DESCRIPTION
+          Value: !Ref SourceDescription
+        - Name: TARGET_DESCRIPTION
+          Value: !Ref TargetDescription
       Tags:
         - Key: owner
           Value: !Ref Owner

@@ -24,6 +24,10 @@ interface BulkSettingsModalProps {
   onClose: () => void;
   onSave: (lockSource: boolean, repositoryVisibility: string) => void;
   selectedCount: number;
+  onArchiveSelected: () => void;
+  onDeleteSelected: () => void;
+  isArchiveView: boolean;
+  onShowDeleteConfirmation: () => void;
 }
 
 interface ResetConfirmationModalProps {
@@ -150,13 +154,23 @@ function ScanOrgModal({ onClose, onScan }: ScanOrgModalProps) {
   );
 }
 
-function BulkSettingsModal({ onClose, onSave, selectedCount }: BulkSettingsModalProps) {
+function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, onDeleteSelected, isArchiveView, onShowDeleteConfirmation }: BulkSettingsModalProps) {
   const [lockSource, setLockSource] = useState(false);
   const [repositoryVisibility, setRepositoryVisibility] = useState("private");
 
   const handleSave = () => {
     onSave(lockSource, repositoryVisibility);
     onClose();
+  };
+
+  const handleArchiveSelected = () => {
+    onArchiveSelected();
+    onClose();
+  };
+
+  const handleDeleteSelected = () => {
+    onClose();
+    onShowDeleteConfirmation();
   };
 
   return (
@@ -196,14 +210,32 @@ function BulkSettingsModal({ onClose, onSave, selectedCount }: BulkSettingsModal
             <div className="form-help">Lock the source repositories during migration to prevent modifications</div>
           </div>
         </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Cancel</button>
-          <button 
-            className="btn btn-primary" 
-            onClick={handleSave}
-          >
-            Save Settings
-          </button>
+        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {!isArchiveView && (
+              <button 
+                className="btn btn-warning" 
+                onClick={handleArchiveSelected}
+              >
+                Archive Selected
+              </button>
+            )}
+            <button 
+              className="btn btn-danger" 
+              onClick={handleDeleteSelected}
+            >
+              Delete Selected
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-default" onClick={onClose}>Cancel</button>
+            <button 
+              className="btn btn-primary" 
+              onClick={handleSave}
+            >
+              Save Settings
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -360,6 +392,38 @@ function DeleteModal({ repository, onClose, onDelete }: DeleteModalProps) {
   );
 }
 
+interface DeleteSelectedConfirmationModalProps {
+  onClose: () => void;
+  onConfirm: () => void;
+  repositoryCount: number;
+}
+
+function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }: DeleteSelectedConfirmationModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Confirm Delete</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p>Are you sure you want to delete {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
+          <p className="form-help">This action cannot be undone.</p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button 
+            className="btn btn-danger" 
+            onClick={onConfirm}
+          >
+            Delete {repositoryCount > 1 ? 'Selected' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface InfoModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
@@ -422,15 +486,18 @@ interface SettingsModalProps {
   onClose: () => void;
   onUpdate: (lockSource: boolean, repositoryVisibility: string) => void;
   onDelete: () => void;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
 }
 
-function SettingsModal({ repository, onClose, onUpdate, onDelete }: SettingsModalProps) {
+function SettingsModal({ repository, onClose, onUpdate, onDelete, onArchive, onUnarchive }: SettingsModalProps) {
   const [lockSource, setLockSource] = useState(repository.lockSource || false);
   const [repositoryVisibility, setRepositoryVisibility] = useState(repository.repositoryVisibility || 'private');
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
   const isSettingsEditable = repository.state === 'pending' || repository.state === 'reset';
+  const isArchived = repository.archived || false;
 
   // Sync local state with repository prop when it changes
   useEffect(() => {
@@ -456,6 +523,20 @@ function SettingsModal({ repository, onClose, onUpdate, onDelete }: SettingsModa
     setShowDeleteConfirmation(false);
     onDelete();
     onClose();
+  };
+
+  const handleArchive = () => {
+    if (onArchive) {
+      onArchive();
+      onClose();
+    }
+  };
+
+  const handleUnarchive = () => {
+    if (onUnarchive) {
+      onUnarchive();
+      onClose();
+    }
   };
 
   return (
@@ -507,7 +588,26 @@ function SettingsModal({ repository, onClose, onUpdate, onDelete }: SettingsModa
             </div>
           )}
         </div>
-        <div className="modal-footer">
+        <div className="modal-footer" style={{ justifyContent: 'flex-start' }}>
+          {isArchived ? (
+            <button 
+              className="btn btn-warning" 
+              onClick={handleUnarchive}
+              title="Unarchive this repository"
+              aria-label="Unarchive this repository"
+            >
+              Unarchive
+            </button>
+          ) : (
+            <button 
+              className="btn btn-warning" 
+              onClick={handleArchive}
+              title="Archive this repository"
+              aria-label="Archive this repository"
+            >
+              Archive
+            </button>
+          )}
           <button 
             className="btn btn-danger" 
             onClick={() => setShowDeleteConfirmation(true)}
@@ -579,9 +679,13 @@ export default function App() {
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
   const [showBulkResetConfirmation, setShowBulkResetConfirmation] = useState(false);
+  const [showDeleteSelectedConfirmation, setShowDeleteSelectedConfirmation] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
+  const [showArchiveView, setShowArchiveView] = useState(false);
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
+  const targetDescription = process.env.NEXT_PUBLIC_TARGET_DESCRIPTION || 'Not configured';
+  const sourceDescription = process.env.NEXT_PUBLIC_SOURCE_DESCRIPTION || 'Not configured';
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -629,11 +733,26 @@ export default function App() {
       state: 'pending',
       lockSource,
       repositoryVisibility,
+      archived: false,
     });
   };
 
   const deleteRepository = async (id: string) => {
     await client.models.RepositoryMigration.delete({ id });
+  };
+
+  const archiveRepository = async (repo: RepositoryMigration) => {
+    await client.models.RepositoryMigration.update({
+      id: repo.id,
+      archived: true,
+    });
+  };
+
+  const unarchiveRepository = async (repo: RepositoryMigration) => {
+    await client.models.RepositoryMigration.update({
+      id: repo.id,
+      archived: false,
+    });
   };
 
   const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: string) => {
@@ -887,6 +1006,7 @@ export default function App() {
               state: 'pending',
               lockSource,
               repositoryVisibility: visibility,
+              archived: false,
             });
           }
         }
@@ -937,6 +1057,7 @@ export default function App() {
               state: 'pending',
               lockSource,
               repositoryVisibility,
+              archived: false,
             });
             
             addedCount++;
@@ -959,7 +1080,7 @@ export default function App() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedRepos(new Set(repositories.map(r => r.id)));
+      setSelectedRepos(new Set(filteredRepositories.map(r => r.id)));
     } else {
       setSelectedRepos(new Set());
     }
@@ -1007,6 +1128,37 @@ export default function App() {
     }
   };
 
+  const handleArchiveSelected = async () => {
+    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id));
+    
+    for (const repo of selectedRepoObjects) {
+      await archiveRepository(repo);
+    }
+    
+    setSelectedRepos(new Set());
+  };
+
+  const handleUnarchiveSelected = async () => {
+    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id));
+    
+    for (const repo of selectedRepoObjects) {
+      await unarchiveRepository(repo);
+    }
+    
+    setSelectedRepos(new Set());
+  };
+
+  const handleDeleteSelected = async () => {
+    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id));
+    
+    for (const repo of selectedRepoObjects) {
+      await deleteRepository(repo.id);
+    }
+    
+    setSelectedRepos(new Set());
+    setShowDeleteSelectedConfirmation(false);
+  };
+
   const canStartSelected = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
     return repo && (repo.state === 'pending' || repo.state === 'reset');
@@ -1023,10 +1175,13 @@ export default function App() {
   });
 
   // Pagination logic
-  const totalPages = Math.ceil(repositories.length / perPage);
+  const filteredRepositories = repositories.filter(repo => 
+    showArchiveView ? (repo.archived === true) : (repo.archived !== true)
+  );
+  const totalPages = Math.ceil(filteredRepositories.length / perPage);
   const startIndex = (currentPage - 1) * perPage;
   const endIndex = startIndex + perPage;
-  const paginatedRepositories = repositories.slice(startIndex, endIndex);
+  const paginatedRepositories = filteredRepositories.slice(startIndex, endIndex);
 
   // Reset to page 1 if current page is out of bounds
   useEffect(() => {
@@ -1034,6 +1189,12 @@ export default function App() {
       setCurrentPage(1);
     }
   }, [currentPage, totalPages]);
+
+  // Reset to page 1 when toggling archive view
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedRepos(new Set());
+  }, [showArchiveView]);
 
   const handlePerPageChange = (newPerPage: number) => {
     setPerPage(newPerPage);
@@ -1059,63 +1220,90 @@ export default function App() {
         <div className="repository-list-header">
           <h2 className="repository-list-title">Repositories</h2>
           <div className="repository-list-actions">
-            <button 
-              className="btn btn-blue" 
-              onClick={() => setShowScanOrgModal(true)}
-              title="Scan a source organization for repositories"
-            >
-              Scan Source Org
-            </button>
-            <input
-              type="file"
-              accept=".csv"
-              style={{ display: 'none' }}
-              id="csv-upload"
-              onChange={handleCSVUpload}
-            />
-            <label htmlFor="csv-upload" className="btn btn-default">
-              Load CSV File
-            </label>
-            <button 
-              className="btn btn-primary" 
-              onClick={handleStartSelected}
-              disabled={!canStartSelected || selectedRepos.size === 0}
-              title={selectedRepos.size === 0 ? 'Select repositories to start' : 'Start selected migrations'}
-            >
-              Start selected
-            </button>
-            <button 
-              className="btn btn-danger" 
-              onClick={() => setShowBulkResetConfirmation(true)}
-              disabled={!canResetSelected || selectedRepos.size === 0}
-              title={selectedRepos.size === 0 ? 'Select repositories to reset' : 'Reset selected migrations'}
-            >
-              Reset selected
-            </button>
-            <button 
-              className="btn btn-default btn-icon" 
-              onClick={() => setShowBulkSettingsModal(true)}
-              disabled={!canUpdateSettings || selectedRepos.size === 0}
-              title={selectedRepos.size === 0 ? 'Select repositories to update settings' : 'Update settings for selected'}
-            >
-              ⚙️
-            </button>
-            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-              Add Repository
-            </button>
+            {!showArchiveView ? (
+              <>
+                <button 
+                  className="btn btn-blue" 
+                  onClick={() => setShowScanOrgModal(true)}
+                  title="Scan a source organization for repositories"
+                >
+                  Scan Source Org
+                </button>
+                <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+                  Add Repository
+                </button>
+                <input
+                  type="file"
+                  accept=".csv"
+                  style={{ display: 'none' }}
+                  id="csv-upload"
+                  onChange={handleCSVUpload}
+                />
+                <label htmlFor="csv-upload" className="btn btn-default">
+                  Load CSV File
+                </label>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleStartSelected}
+                  disabled={!canStartSelected || selectedRepos.size === 0}
+                  title={selectedRepos.size === 0 ? 'Select repositories to start' : 'Start selected migrations'}
+                >
+                  Start Selected
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={() => setShowBulkResetConfirmation(true)}
+                  disabled={!canResetSelected || selectedRepos.size === 0}
+                  title={selectedRepos.size === 0 ? 'Select repositories to reset' : 'Reset selected migrations'}
+                >
+                  Reset Selected
+                </button>
+                <button 
+                  className="btn btn-default btn-icon" 
+                  onClick={() => setShowBulkSettingsModal(true)}
+                  disabled={!canUpdateSettings || selectedRepos.size === 0}
+                  title={selectedRepos.size === 0 ? 'Select repositories to update settings' : 'Update settings for selected'}
+                >
+                  ⚙️
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  className="btn btn-warning" 
+                  onClick={handleUnarchiveSelected}
+                  disabled={selectedRepos.size === 0}
+                  title={selectedRepos.size === 0 ? 'Select repositories to unarchive' : 'Unarchive selected repositories'}
+                >
+                  Unarchive Selected
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={handleDeleteSelected}
+                  disabled={selectedRepos.size === 0}
+                  title={selectedRepos.size === 0 ? 'Select repositories to delete' : 'Delete selected repositories'}
+                >
+                  Delete Selected
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {repositories.length === 0 ? (
+        {filteredRepositories.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">📦</div>
-            <h3 className="empty-state-title">No repositories yet</h3>
+            <h3 className="empty-state-title">{showArchiveView ? 'No archived repositories' : 'No repositories yet'}</h3>
             <p className="empty-state-description">
-              Get started by adding a repository to migrate or load a CSV file
+              {showArchiveView 
+                ? 'You have no archived repositories' 
+                : 'Get started by adding a repository to migrate or load a CSV file'}
             </p>
-            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-              Add Your First Repository
-            </button>
+            {!showArchiveView && (
+              <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+                Add Your First Repository
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -1123,7 +1311,7 @@ export default function App() {
               <div className="repository-checkbox-cell">
                 <input
                   type="checkbox"
-                  checked={selectedRepos.size === repositories.length && repositories.length > 0}
+                  checked={selectedRepos.size === filteredRepositories.length && filteredRepositories.length > 0}
                   onChange={(e) => handleSelectAll(e.target.checked)}
                   aria-label="Select all repositories"
                 />
@@ -1131,101 +1319,138 @@ export default function App() {
               <div className="repository-info-header">Repository</div>
               <div className="repository-actions-header">Actions</div>
             </div>
-            {paginatedRepositories.map((repo) => (
-              <div key={repo.id} className="repository-item">
-                <div className="repository-checkbox-cell">
-                  <input
-                    type="checkbox"
-                    checked={selectedRepos.has(repo.id)}
-                    onChange={(e) => handleSelectRepo(repo.id, e.target.checked)}
-                    aria-label={`Select ${repo.repositoryName}`}
-                  />
+            {paginatedRepositories.map((repo) => {
+              const isArchived = repo.archived === true;
+              const canClickStatus = isArchived && (repo.state === 'completed' || repo.state === 'failed');
+              
+              return (
+                <div key={repo.id} className="repository-item">
+                  <div className="repository-checkbox-cell">
+                    <input
+                      type="checkbox"
+                      checked={selectedRepos.has(repo.id)}
+                      onChange={(e) => handleSelectRepo(repo.id, e.target.checked)}
+                      aria-label={`Select ${repo.repositoryName}`}
+                    />
+                  </div>
+                  <div className="repository-info">
+                    <div className="repository-name">{repo.repositoryName}</div>
+                    <div className="repository-url">{repo.sourceRepositoryUrl}</div>
+                  </div>
+                  <div className="repository-actions">
+                    <button 
+                      className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
+                      onClick={() => {
+                        if (canClickStatus) {
+                          // Archived repos in completed/failed state can show info modal
+                          setInfoRepo(repo);
+                        } else if (!isArchived) {
+                          // Non-archived repos use normal handleStatusButtonClick logic
+                          handleStatusButtonClick(repo);
+                        }
+                      }}
+                      disabled={isArchived && !canClickStatus}
+                    >
+                      {getStatusButtonText(repo.state)}
+                    </button>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      onClick={() => setResetRepo(repo)}
+                      disabled={isArchived || repo.state === 'pending' || repo.state === 'reset'}
+                      title={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository')}
+                      aria-label={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository')}
+                    >
+                      Reset
+                    </button>
+                    <button 
+                      className="btn btn-default btn-sm btn-icon"
+                      onClick={() => setSettingsRepo(repo)}
+                      title="Repository settings"
+                    >
+                      ⚙️
+                    </button>
+                  </div>
                 </div>
-                <div className="repository-info">
-                  <div className="repository-name">{repo.repositoryName}</div>
-                  <div className="repository-url">{repo.sourceRepositoryUrl}</div>
-                </div>
-                <div className="repository-actions">
-                  <button 
-                    className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
-                    onClick={() => handleStatusButtonClick(repo)}
-                  >
-                    {getStatusButtonText(repo.state)}
-                  </button>
-                  <button 
-                    className="btn btn-danger btn-sm"
-                    onClick={() => setResetRepo(repo)}
-                    disabled={repo.state === 'pending' || repo.state === 'reset'}
-                    title={repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
-                    aria-label={repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository'}
-                  >
-                    Reset
-                  </button>
-                  <button 
-                    className="btn btn-default btn-sm btn-icon"
-                    onClick={() => setSettingsRepo(repo)}
-                    title="Repository settings"
-                  >
-                    ⚙️
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </>
         )}
       </div>
 
       {repositories.length > 0 && (
-        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-              Per page:
-            </label>
-            <select
-              id="per-page-select"
-              value={perPage}
-              onChange={(e) => handlePerPageChange(Number(e.target.value))}
-              style={{
-                padding: '4px 8px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                border: '1px solid var(--color-border-default)',
-                backgroundColor: 'var(--color-canvas-default)',
-                color: 'var(--color-fg-default)',
-              }}
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-          </div>
-          <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-            Showing {repositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, repositories.length)} of {repositories.length} repositories
-          </span>
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <>
+          {filteredRepositories.length > 0 && (
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                    Per page:
+                  </label>
+                  <select
+                    id="per-page-select"
+                    value={perPage}
+                    onChange={(e) => handlePerPageChange(Number(e.target.value))}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--color-border-default)',
+                      backgroundColor: 'var(--color-canvas-default)',
+                      color: 'var(--color-fg-default)',
+                    }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                  Showing {filteredRepositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, filteredRepositories.length)} of {filteredRepositories.length} repositories
+                </span>
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      className="btn btn-default btn-sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      className="btn btn-default btn-sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 className="btn btn-default btn-sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
+                onClick={() => setShowArchiveView(!showArchiveView)}
+                style={{ marginLeft: 'auto' }}
               >
-                Previous
-              </button>
-              <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                className="btn btn-default btn-sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
+                {showArchiveView ? 'Show Main' : 'Show Archive'}
               </button>
             </div>
           )}
-        </div>
+          {filteredRepositories.length === 0 && (
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="btn btn-default btn-sm"
+                onClick={() => setShowArchiveView(!showArchiveView)}
+              >
+                {showArchiveView ? 'Show Main' : 'Show Archive'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {showAddModal && (
@@ -1248,6 +1473,8 @@ export default function App() {
           onClose={() => setSettingsRepo(null)}
           onUpdate={(lockSource, repositoryVisibility) => updateRepositorySettings(settingsRepo, lockSource, repositoryVisibility)}
           onDelete={() => deleteRepository(settingsRepo.id)}
+          onArchive={() => archiveRepository(settingsRepo)}
+          onUnarchive={() => unarchiveRepository(settingsRepo)}
         />
       )}
 
@@ -1263,6 +1490,10 @@ export default function App() {
           onClose={() => setShowBulkSettingsModal(false)}
           onSave={handleBulkSettingsUpdate}
           selectedCount={selectedRepos.size}
+          onArchiveSelected={handleArchiveSelected}
+          onDeleteSelected={handleDeleteSelected}
+          isArchiveView={showArchiveView}
+          onShowDeleteConfirmation={() => setShowDeleteSelectedConfirmation(true)}
         />
       )}
 
@@ -1291,6 +1522,14 @@ export default function App() {
         <ScanOrgModal
           onClose={() => setShowScanOrgModal(false)}
           onScan={handleScanOrg}
+        />
+      )}
+
+      {showDeleteSelectedConfirmation && (
+        <DeleteSelectedConfirmationModal
+          onClose={() => setShowDeleteSelectedConfirmation(false)}
+          onConfirm={handleDeleteSelected}
+          repositoryCount={repositories.filter(r => selectedRepos.has(r.id)).length}
         />
       )}
     </div>
