@@ -15,7 +15,7 @@ const schema = a.schema({
       destinationOwnerId: a.string(),
       migrationSourceId: a.string(),
       repositoryMigrationId: a.string(),
-      state: a.string(), // 'pending', 'in_progress', 'completed', 'failed'
+      state: a.string(), // 'pending', 'queued', 'in_progress', 'completed', 'failed'
       failureReason: a.string(),
       lockSource: a.boolean(), // Whether to lock the source repository during migration
       repositoryVisibility: a.string(), // 'private', 'public', or 'internal'

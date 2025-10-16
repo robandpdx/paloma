@@ -545,7 +545,7 @@ function SettingsModal({ repository, onClose, onUpdate, onDelete, onArchive, onU
   const [repositoryVisibility, setRepositoryVisibility] = useState(repository.repositoryVisibility || 'private');
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const isMigrationStarted = repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
+  const isMigrationStarted = repository.state === 'queued' || repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
   const isSettingsEditable = repository.state === 'pending' || repository.state === 'reset';
   const isArchived = repository.archived || false;
 
@@ -756,12 +756,12 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Resume polling for repositories that are in progress on page load/refresh
+  // Resume polling for repositories that are in progress or queued on page load/refresh
   useEffect(() => {
     repositories.forEach(repo => {
-      // Start polling for repositories that are in_progress and have a repositoryMigrationId
+      // Start polling for repositories that are in_progress or queued and have a repositoryMigrationId
       // Check ref to avoid unnecessary state updates
-      if (repo.state === 'in_progress' && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
+      if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
         startPolling(repo.id, repo.repositoryMigrationId);
       }
     });
@@ -865,10 +865,10 @@ export default function App() {
 
   const startMigration = async (repo: RepositoryMigration) => {
     try {
-      // Update state to in_progress
+      // Optimistic update: Set state to queued immediately for user feedback
       await client.models.RepositoryMigration.update({
         id: repo.id,
-        state: 'in_progress',
+        state: 'queued',
       });
 
       // Call the startMigration function
@@ -891,13 +891,13 @@ export default function App() {
         const response = JSON.parse(lambdaResponse.body);
         
         if (response.success) {
-          // Update the repository with migration details
+          // Update with complete migration details including IDs
           await client.models.RepositoryMigration.update({
             id: repo.id,
             repositoryMigrationId: response.migrationId,
             migrationSourceId: response.migrationSourceId,
             destinationOwnerId: response.ownerId,
-            state: 'in_progress',
+            // Keep state as queued; polling will update to actual state
           });
 
           // Start polling for status
@@ -982,6 +982,7 @@ export default function App() {
 
   const getStatusButtonClass = (state?: string | null) => {
     switch (state) {
+      case 'queued':
       case 'in_progress':
         return 'btn-status-in-progress';
       case 'completed':
@@ -997,6 +998,7 @@ export default function App() {
 
   const getStatusButtonText = (state?: string | null) => {
     switch (state) {
+      case 'queued':
       case 'in_progress':
         return 'In Progress';
       case 'completed':
