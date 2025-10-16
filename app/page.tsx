@@ -1303,7 +1303,15 @@ export default function App() {
                   <div className="repository-actions">
                     <button 
                       className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
-                      onClick={() => canClickStatus || (!isArchived && (!repo.state || repo.state === 'pending' || repo.state === 'reset')) ? handleStatusButtonClick(repo) : setInfoRepo(repo)}
+                      onClick={() => {
+                        if (canClickStatus) {
+                          // Archived repos in completed/failed state can show info modal
+                          setInfoRepo(repo);
+                        } else if (!isArchived) {
+                          // Non-archived repos use normal handleStatusButtonClick logic
+                          handleStatusButtonClick(repo);
+                        }
+                      }}
                       disabled={isArchived && !canClickStatus}
                     >
                       {getStatusButtonText(repo.state)}
