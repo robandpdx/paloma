@@ -684,6 +684,8 @@ export default function App() {
   const [perPage, setPerPage] = useState(10);
   const [showArchiveView, setShowArchiveView] = useState(false);
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
+  const targetDescription = process.env.NEXT_PUBLIC_TARGET_DESCRIPTION || 'Not configured';
+  const sourceDescription = process.env.NEXT_PUBLIC_SOURCE_DESCRIPTION || 'Not configured';
 
   // Keep ref in sync with state
   useEffect(() => {
