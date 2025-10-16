@@ -1367,7 +1367,7 @@ export default function App() {
                 </button>
                 <button 
                   className="btn btn-danger" 
-                  onClick={handleDeleteSelected}
+                  onClick={() => setShowDeleteSelectedConfirmation(true)}
                   disabled={selectedRepos.size === 0}
                   title={selectedRepos.size === 0 ? 'Select repositories to delete' : 'Delete selected repositories'}
                 >
