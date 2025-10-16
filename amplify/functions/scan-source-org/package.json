@@ -1,0 +1,25 @@
+{
+  "name": "scan-source-org-function",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lambda function to scan GitHub source organization for repositories",
+  "main": "handler.ts",
+  "scripts": {
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "github",
+    "organization",
+    "lambda",
+    "amplify"
+  ],
+  "author": "",
+  "license": "MIT-0",
+  "dependencies": {
+    "@octokit/rest": "^20.0.2"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20"
+  }
+}

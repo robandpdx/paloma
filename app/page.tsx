@@ -33,6 +33,11 @@ interface ResetConfirmationModalProps {
   hasLockedRepos?: boolean;
 }
 
+interface ScanOrgModalProps {
+  onClose: () => void;
+  onScan: (orgName: string, repositoryVisibility: string, lockSource: boolean) => void;
+}
+
 function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false }: ResetConfirmationModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -61,6 +66,83 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
             onClick={onConfirm}
           >
             Reset {repositoryCount > 1 ? 'Selected' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScanOrgModal({ onClose, onScan }: ScanOrgModalProps) {
+  const [orgName, setOrgName] = useState("");
+  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
+  const [lockSource, setLockSource] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleScan = async () => {
+    if (orgName) {
+      setIsScanning(true);
+      await onScan(orgName, repositoryVisibility, lockSource);
+      setIsScanning(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Scan Source Organization</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label className="form-label">Organization Name</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="organization-name"
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              disabled={isScanning}
+            />
+            <div className="form-help">Enter the name of the GitHub organization to scan</div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Repository Visibility</label>
+            <select
+              className="form-input"
+              value={repositoryVisibility}
+              onChange={(e) => setRepositoryVisibility(e.target.value)}
+              disabled={isScanning}
+            >
+              <option value="private">Private</option>
+              <option value="public">Public</option>
+              <option value="internal">Internal</option>
+            </select>
+            <div className="form-help">Select the visibility for all scanned repositories</div>
+          </div>
+          <div className="form-group">
+            <label className="form-checkbox-wrapper">
+              <input
+                type="checkbox"
+                className="form-checkbox"
+                checked={lockSource}
+                onChange={(e) => setLockSource(e.target.checked)}
+                disabled={isScanning}
+              />
+              <span className="form-checkbox-label">Lock source repository</span>
+            </label>
+            <div className="form-help">Lock the source repositories during migration to prevent modifications</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose} disabled={isScanning}>Cancel</button>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleScan}
+            disabled={!orgName || isScanning}
+          >
+            {isScanning ? 'Scanning...' : 'Scan'}
           </button>
         </div>
       </div>
@@ -487,6 +569,7 @@ export default function App() {
   const { signOut } = useAuthenticator();
   const [repositories, setRepositories] = useState<RepositoryMigration[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showScanOrgModal, setShowScanOrgModal] = useState(false);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [resetRepo, setResetRepo] = useState<RepositoryMigration | null>(null);
@@ -496,6 +579,8 @@ export default function App() {
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
   const [showBulkResetConfirmation, setShowBulkResetConfirmation] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
 
   // Keep ref in sync with state
@@ -812,6 +897,66 @@ export default function App() {
     event.target.value = '';
   };
 
+  const handleScanOrg = async (orgName: string, repositoryVisibility: string, lockSource: boolean) => {
+    try {
+      console.log(`Scanning organization: ${orgName}`);
+      
+      // Call the scanSourceOrg function
+      const result = await client.queries.scanSourceOrg({
+        organizationName: orgName,
+      });
+
+      console.log('Scan result:', result);
+
+      if (result.data) {
+        // Parse the outer JSON wrapper
+        const lambdaResponse = JSON.parse(result.data as string);
+        // Parse the inner body JSON
+        const response = JSON.parse(lambdaResponse.body);
+        
+        if (response.success && response.repositories) {
+          console.log(`Found ${response.repositories.length} repositories`);
+          
+          // Add repositories to the database
+          let addedCount = 0;
+          let skippedCount = 0;
+          
+          for (const repo of response.repositories) {
+            // Check if repository already exists in the database
+            const existingRepo = repositories.find(r => r.sourceRepositoryUrl === repo.html_url);
+            if (existingRepo) {
+              console.log(`Skipping ${repo.name} - already exists in database`);
+              skippedCount++;
+              continue;
+            }
+            
+            // Add repository to database
+            await client.models.RepositoryMigration.create({
+              sourceRepositoryUrl: repo.html_url,
+              repositoryName: repo.name,
+              state: 'pending',
+              lockSource,
+              repositoryVisibility,
+            });
+            
+            addedCount++;
+          }
+          
+          console.log(`Added ${addedCount} repositories, skipped ${skippedCount} existing repositories`);
+          alert(`Successfully scanned ${orgName}!\nAdded: ${addedCount} repositories\nSkipped: ${skippedCount} existing repositories`);
+        } else {
+          console.error('Scan failed:', response);
+          alert(`Failed to scan organization: ${response.message || 'Unknown error'}`);
+        }
+      }
+      
+      setShowScanOrgModal(false);
+    } catch (error) {
+      console.error('Error scanning organization:', error);
+      alert(`Error scanning organization: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       setSelectedRepos(new Set(repositories.map(r => r.id)));
@@ -877,6 +1022,24 @@ export default function App() {
     return repo && (repo.state === 'pending' || repo.state === 'reset');
   });
 
+  // Pagination logic
+  const totalPages = Math.ceil(repositories.length / perPage);
+  const startIndex = (currentPage - 1) * perPage;
+  const endIndex = startIndex + perPage;
+  const paginatedRepositories = repositories.slice(startIndex, endIndex);
+
+  // Reset to page 1 if current page is out of bounds
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
+  const handlePerPageChange = (newPerPage: number) => {
+    setPerPage(newPerPage);
+    setCurrentPage(1); // Reset to first page when changing per page
+  };
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -896,6 +1059,13 @@ export default function App() {
         <div className="repository-list-header">
           <h2 className="repository-list-title">Repositories</h2>
           <div className="repository-list-actions">
+            <button 
+              className="btn btn-primary" 
+              onClick={() => setShowScanOrgModal(true)}
+              title="Scan a source organization for repositories"
+            >
+              Scan Source Org
+            </button>
             <input
               type="file"
               accept=".csv"
@@ -949,6 +1119,56 @@ export default function App() {
           </div>
         ) : (
           <>
+            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                  Per page:
+                </label>
+                <select
+                  id="per-page-select"
+                  value={perPage}
+                  onChange={(e) => handlePerPageChange(Number(e.target.value))}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '14px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-border-default)',
+                    backgroundColor: 'var(--color-canvas-default)',
+                    color: 'var(--color-fg-default)',
+                  }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)', marginLeft: '16px' }}>
+                  Showing {repositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, repositories.length)} of {repositories.length} repositories
+                </span>
+              </div>
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    className="btn btn-default btn-sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    className="btn btn-default btn-sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="repository-table-header">
               <div className="repository-checkbox-cell">
                 <input
@@ -961,7 +1181,7 @@ export default function App() {
               <div className="repository-info-header">Repository</div>
               <div className="repository-actions-header">Actions</div>
             </div>
-            {repositories.map((repo) => (
+            {paginatedRepositories.map((repo) => (
               <div key={repo.id} className="repository-item">
                 <div className="repository-checkbox-cell">
                   <input
@@ -1061,6 +1281,13 @@ export default function App() {
           onConfirm={handleResetSelected}
           repositoryCount={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').length}
           hasLockedRepos={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').some(r => r.lockSource)}
+        />
+      )}
+
+      {showScanOrgModal && (
+        <ScanOrgModal
+          onClose={() => setShowScanOrgModal(false)}
+          onScan={handleScanOrg}
         />
       )}
     </div>
