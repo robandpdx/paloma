@@ -449,24 +449,40 @@ interface DeleteSelectedConfirmationModalProps {
 }
 
 function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }: DeleteSelectedConfirmationModalProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    await onConfirm();
+    setIsDeleting(false);
+    onClose();
+  };
+
+  const handleOverlayClick = () => {
+    if (!isDeleting) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleOverlayClick}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Confirm Delete</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={onClose} disabled={isDeleting}>×</button>
         </div>
         <div className="modal-body">
           <p>Are you sure you want to delete {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
           <p className="form-help">This action cannot be undone.</p>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button className="btn btn-default" onClick={onClose} disabled={isDeleting}>Cancel</button>
           <button 
             className="btn btn-danger" 
-            onClick={onConfirm}
+            onClick={handleDelete}
+            disabled={isDeleting}
           >
-            Delete {repositoryCount > 1 ? 'Selected' : ''}
+            {isDeleting ? 'Deleting...' : `Delete ${repositoryCount > 1 ? 'Selected' : ''}`}
           </button>
         </div>
       </div>
@@ -1207,7 +1223,6 @@ export default function App() {
     }
     
     setSelectedRepos(new Set());
-    setShowDeleteSelectedConfirmation(false);
   };
 
   const canStartSelected = Array.from(selectedRepos).some(id => {
