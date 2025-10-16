@@ -865,10 +865,10 @@ export default function App() {
 
   const startMigration = async (repo: RepositoryMigration) => {
     try {
-      // Update state to in_progress
+      // Update state to queued (migrations typically start in queued state)
       await client.models.RepositoryMigration.update({
         id: repo.id,
-        state: 'in_progress',
+        state: 'queued',
       });
 
       // Call the startMigration function
@@ -891,13 +891,14 @@ export default function App() {
         const response = JSON.parse(lambdaResponse.body);
         
         if (response.success) {
-          // Update the repository with migration details
+          // Update the repository with migration details, keeping queued state
+          // The polling mechanism will update to in_progress or other states as they occur
           await client.models.RepositoryMigration.update({
             id: repo.id,
             repositoryMigrationId: response.migrationId,
             migrationSourceId: response.migrationSourceId,
             destinationOwnerId: response.ownerId,
-            state: 'in_progress',
+            state: 'queued',
           });
 
           // Start polling for status
