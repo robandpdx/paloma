@@ -1060,7 +1060,7 @@ export default function App() {
           <h2 className="repository-list-title">Repositories</h2>
           <div className="repository-list-actions">
             <button 
-              className="btn btn-primary" 
+              className="btn btn-blue" 
               onClick={() => setShowScanOrgModal(true)}
               title="Scan a source organization for repositories"
             >

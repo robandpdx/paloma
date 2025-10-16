@@ -184,6 +184,17 @@ body {
   background-color: var(--color-btn-danger-hover-bg);
 }
 
+.btn-blue {
+  color: #ffffff;
+  background-color: #0969da;
+  border-color: rgba(31, 35, 40, 0.15);
+  box-shadow: var(--color-btn-shadow);
+}
+
+.btn-blue:hover:not(:disabled) {
+  background-color: #0860ca;
+}
+
 .btn-default {
   color: var(--color-fg-default);
   background-color: var(--color-btn-bg);
