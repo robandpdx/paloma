@@ -6,6 +6,7 @@ import { checkMigrationStatus } from './functions/check-migration-status/resourc
 import { getOwnerId } from './functions/get-owner-id/resource.js';
 import { deleteTargetRepo } from './functions/delete-target-repo/resource.js';
 import { unlockSourceRepo } from './functions/unlock-source-repo/resource.js';
+import { scanSourceOrg } from './functions/scan-source-org/resource.js';
 
 defineBackend({
   auth,
@@ -15,4 +16,5 @@ defineBackend({
   getOwnerId,
   deleteTargetRepo,
   unlockSourceRepo,
+  scanSourceOrg,
 });

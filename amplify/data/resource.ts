@@ -4,6 +4,7 @@ import { checkMigrationStatus } from "../functions/check-migration-status/resour
 import { getOwnerId } from "../functions/get-owner-id/resource.js";
 import { deleteTargetRepo } from "../functions/delete-target-repo/resource.js";
 import { unlockSourceRepo } from "../functions/unlock-source-repo/resource.js";
+import { scanSourceOrg } from "../functions/scan-source-org/resource.js";
 
 const schema = a.schema({
   // Repository Migration tracking model
@@ -69,6 +70,15 @@ const schema = a.schema({
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(unlockSourceRepo)),
+  
+  scanSourceOrg: a
+    .query()
+    .arguments({
+      organizationName: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(scanSourceOrg)),
 });
 
 export type Schema = ClientSchema<typeof schema>;
