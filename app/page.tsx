@@ -51,12 +51,27 @@ interface EnvironmentInfoModalProps {
 }
 
 function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false }: ResetConfirmationModalProps) {
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleReset = async () => {
+    setIsResetting(true);
+    await onConfirm();
+    setIsResetting(false);
+    onClose();
+  };
+
+  const handleClose = () => {
+    if (!isResetting) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Confirm Reset</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={handleClose} disabled={isResetting}>×</button>
         </div>
         <div className="modal-body">
           <p>Are you sure you want to reset {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
@@ -72,12 +87,13 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
           </ul>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button className="btn btn-default" onClick={handleClose} disabled={isResetting}>Cancel</button>
           <button 
             className="btn btn-danger" 
-            onClick={onConfirm}
+            onClick={handleReset}
+            disabled={isResetting}
           >
-            Reset {repositoryCount > 1 ? 'Selected' : ''}
+            {isResetting ? 'Resetting...' : `Reset ${repositoryCount > 1 ? 'Selected' : ''}`}
           </button>
         </div>
       </div>
@@ -449,24 +465,40 @@ interface DeleteSelectedConfirmationModalProps {
 }
 
 function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }: DeleteSelectedConfirmationModalProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    await onConfirm();
+    setIsDeleting(false);
+    onClose();
+  };
+
+  const handleClose = () => {
+    if (!isDeleting) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Confirm Delete</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={handleClose} disabled={isDeleting}>×</button>
         </div>
         <div className="modal-body">
           <p>Are you sure you want to delete {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
           <p className="form-help">This action cannot be undone.</p>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Cancel</button>
+          <button className="btn btn-default" onClick={handleClose} disabled={isDeleting}>Cancel</button>
           <button 
             className="btn btn-danger" 
-            onClick={onConfirm}
+            onClick={handleDelete}
+            disabled={isDeleting}
           >
-            Delete {repositoryCount > 1 ? 'Selected' : ''}
+            {isDeleting ? 'Deleting...' : `Delete ${repositoryCount > 1 ? 'Selected' : ''}`}
           </button>
         </div>
       </div>
@@ -1167,8 +1199,6 @@ export default function App() {
     for (const repo of selectedRepoObjects) {
       await resetRepository(repo);
     }
-    
-    setShowBulkResetConfirmation(false);
   };
 
   const handleBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: string) => {
@@ -1209,7 +1239,6 @@ export default function App() {
     }
     
     setSelectedRepos(new Set());
-    setShowDeleteSelectedConfirmation(false);
   };
 
   const canStartSelected = Array.from(selectedRepos).some(id => {
