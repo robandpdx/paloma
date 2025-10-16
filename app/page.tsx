@@ -1171,59 +1171,62 @@ export default function App() {
                 </div>
               </div>
             ))}
-            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-                  Per page:
-                </label>
-                <select
-                  id="per-page-select"
-                  value={perPage}
-                  onChange={(e) => handlePerPageChange(Number(e.target.value))}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '14px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--color-border-default)',
-                    backgroundColor: 'var(--color-canvas-default)',
-                    color: 'var(--color-fg-default)',
-                  }}
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-              <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-                Showing {repositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, repositories.length)} of {repositories.length} repositories
-              </span>
-              {totalPages > 1 && (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <button
-                    className="btn btn-default btn-sm"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </button>
-                  <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <button
-                    className="btn btn-default btn-sm"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
-            </div>
           </>
         )}
       </div>
+
+      {repositories.length > 0 && (
+        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label htmlFor="per-page-select" style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+              Per page:
+            </label>
+            <select
+              id="per-page-select"
+              value={perPage}
+              onChange={(e) => handlePerPageChange(Number(e.target.value))}
+              style={{
+                padding: '4px 8px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: '1px solid var(--color-border-default)',
+                backgroundColor: 'var(--color-canvas-default)',
+                color: 'var(--color-fg-default)',
+              }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+            Showing {repositories.length === 0 ? 0 : startIndex + 1} to {Math.min(endIndex, repositories.length)} of {repositories.length} repositories
+          </span>
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                className="btn btn-default btn-sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: '14px', color: 'var(--color-fg-muted)' }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="btn btn-default btn-sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {showAddModal && (
         <AddRepoModal
