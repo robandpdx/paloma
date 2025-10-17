@@ -33,7 +33,7 @@ interface BulkSettingsModalProps {
 
 interface ResetConfirmationModalProps {
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
   repositoryCount: number;
   hasLockedRepos?: boolean;
 }
@@ -1589,9 +1589,8 @@ export default function App() {
       {resetRepo && (
         <ResetConfirmationModal
           onClose={() => setResetRepo(null)}
-          onConfirm={() => {
-            resetRepository(resetRepo);
-            setResetRepo(null);
+          onConfirm={async () => {
+            await resetRepository(resetRepo);
           }}
           repositoryCount={1}
           hasLockedRepos={resetRepo.lockSource || false}
