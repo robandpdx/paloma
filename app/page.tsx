@@ -33,7 +33,7 @@ interface BulkSettingsModalProps {
 
 interface ResetConfirmationModalProps {
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
   repositoryCount: number;
   hasLockedRepos?: boolean;
 }
