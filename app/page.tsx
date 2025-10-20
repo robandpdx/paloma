@@ -1787,7 +1787,45 @@ export default function App() {
 
   const canResetSelected = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
-    return repo && repo.state !== 'pending' && repo.state !== 'reset';
+    if (!repo || repo.archived) return false;
+    
+    // In GH mode: can reset if state is not 'pending' or 'reset'
+    if (!isGHESMode) {
+      return repo.state !== 'pending' && repo.state !== 'reset';
+    }
+    
+    // In GHES mode: apply the same logic as individual Reset button
+    // Can reset if:
+    // 1. State is 'reset' AND both exports are 'exported'
+    // 2. State is 'pending' AND both exports are 'exported' (not pending/exporting)
+    // 3. State is anything else (completed, failed, in_progress)
+    
+    if (repo.state === 'reset') {
+      // Only enable if both exports are exported
+      return repo.gitSourceExportState === 'exported' && 
+             repo.metadataExportState === 'exported';
+    }
+    
+    if (repo.state === 'pending') {
+      // Only enable if exports are completed (not pending or exporting)
+      const gitExported = repo.gitSourceExportState === 'exported';
+      const metadataExported = repo.metadataExportState === 'exported';
+      const exportsCompleted = gitExported && metadataExported;
+      
+      // Disable if exports are pending or in progress
+      const exportsInProgress = 
+        !repo.gitSourceExportState || 
+        !repo.metadataExportState ||
+        repo.gitSourceExportState === 'pending' ||
+        repo.metadataExportState === 'pending' ||
+        repo.gitSourceExportState === 'exporting' ||
+        repo.metadataExportState === 'exporting';
+      
+      return !exportsInProgress && exportsCompleted;
+    }
+    
+    // For other states (completed, failed, in_progress), always enable
+    return true;
   });
 
   const canUpdateSettings = Array.from(selectedRepos).some(id => {
