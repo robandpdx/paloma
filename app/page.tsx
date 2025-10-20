@@ -994,14 +994,23 @@ export default function App() {
       const shouldUnlock = isGHESMode ? resetExport : true;
       
       // Unlock source repository if it was locked
-      if (shouldUnlock && repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
-        console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
-        const unlockResult = await client.queries.unlockSourceRepo({
-          sourceRepositoryUrl: repo.sourceRepositoryUrl,
-          migrationSourceId: repo.migrationSourceId,
-          repositoryName: repo.repositoryName,
-        });
-        console.log('Unlock result:', unlockResult);
+      // In GHES mode (after export), we only need sourceRepositoryUrl
+      // In GH mode (after migration), we need migrationSourceId and repositoryName as well
+      if (shouldUnlock && repo.lockSource && repo.sourceRepositoryUrl) {
+        // Only call unlock if we have the required fields based on the mode and state
+        const hasRequiredFields = isGHESMode 
+          ? true  // In GHES mode, sourceRepositoryUrl is sufficient
+          : (repo.migrationSourceId && repo.repositoryName); // In GH mode, need migration fields
+        
+        if (hasRequiredFields) {
+          console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
+          const unlockResult = await client.queries.unlockSourceRepo({
+            sourceRepositoryUrl: repo.sourceRepositoryUrl,
+            migrationSourceId: repo.migrationSourceId || '',
+            repositoryName: repo.repositoryName || '',
+          });
+          console.log('Unlock result:', unlockResult);
+        }
       }
 
       // Update the repository record
