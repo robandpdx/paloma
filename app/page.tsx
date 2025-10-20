@@ -838,7 +838,7 @@ export default function App() {
   }, [pollingExports]);
 
   // Define startPolling before it's used in effects
-  const startPolling = useCallback((repoId: string, migrationId: string) => {
+  const startPolling = useCallback((repoId: string, _migrationId: string) => {
     setPollingRepos(prev => new Set(prev).add(repoId));
   }, []);
 
@@ -946,7 +946,7 @@ export default function App() {
       }
 
       // Update the repository record
-      const updateFields: any = {
+      const updateFields: Record<string, string | boolean | null> = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
@@ -973,7 +973,7 @@ export default function App() {
     } catch (error) {
       console.error('Error resetting repository:', error);
       // Still update the state even if the API calls failed
-      const updateFields: any = {
+      const updateFields: Record<string, string | boolean | null> = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
@@ -1123,8 +1123,8 @@ export default function App() {
     }
   };
 
-  const startExportPolling = useCallback((repoId: string, organizationName: string) => {
-    setPollingExports(prev => new Set(prev).add(repoId));
+  const startExportPolling = useCallback((_repoId: string, _organizationName: string) => {
+    setPollingExports(prev => new Set(prev).add(_repoId));
   }, []);
 
   const checkMigrationStatus = useCallback(async (repoId: string, migrationId: string) => {
@@ -1345,8 +1345,8 @@ export default function App() {
     // In GHES mode, both exports must be completed
     return repo.gitSourceExportState === 'exported' && 
            repo.metadataExportState === 'exported' &&
-           repo.gitSourceArchiveUrl &&
-           repo.metadataArchiveUrl;
+           !!repo.gitSourceArchiveUrl &&
+           !!repo.metadataArchiveUrl;
   };
 
   const handleStatusButtonClick = (repo: RepositoryMigration) => {
