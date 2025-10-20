@@ -1731,9 +1731,24 @@ export default function App() {
   };
 
   const handleResetSelected = async (resetExport: boolean = false) => {
-    const selectedRepoObjects = repositories.filter(r => 
-      selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset'
-    );
+    const selectedRepoObjects = repositories.filter(r => {
+      if (!selectedRepos.has(r.id)) return false;
+      
+      // In GH mode: exclude 'pending' and 'reset' states
+      if (!isGHESMode) {
+        return r.state !== 'pending' && r.state !== 'reset';
+      }
+      
+      // In GHES mode: allow reset if exports are completed, even if state is 'pending' or 'reset'
+      if (r.state === 'pending' || r.state === 'reset') {
+        const exportsCompleted = r.gitSourceExportState === 'exported' && 
+                                 r.metadataExportState === 'exported';
+        return exportsCompleted;
+      }
+      
+      // For other states in GHES mode, allow reset
+      return true;
+    });
     
     for (const repo of selectedRepoObjects) {
       await resetRepository(repo, resetExport);
@@ -2239,7 +2254,25 @@ export default function App() {
       )}
 
       {showBulkResetConfirmation && (() => {
-        const selectedResetRepos = repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset');
+        const selectedResetRepos = repositories.filter(r => {
+          if (!selectedRepos.has(r.id)) return false;
+          
+          // In GH mode: exclude 'pending' and 'reset' states
+          if (!isGHESMode) {
+            return r.state !== 'pending' && r.state !== 'reset';
+          }
+          
+          // In GHES mode: allow reset if exports are completed, even if state is 'pending' or 'reset'
+          if (r.state === 'pending' || r.state === 'reset') {
+            const exportsCompleted = r.gitSourceExportState === 'exported' && 
+                                     r.metadataExportState === 'exported';
+            return exportsCompleted;
+          }
+          
+          // For other states in GHES mode, allow reset
+          return true;
+        });
+        
         const allExportsCompleted = selectedResetRepos.every(r => 
           r.gitSourceExportState === 'exported' && r.metadataExportState === 'exported'
         );
