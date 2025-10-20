@@ -37,6 +37,8 @@ interface ResetConfirmationModalProps {
   repositoryCount: number;
   hasLockedRepos?: boolean;
   isGHESMode?: boolean;
+  exportCompleted?: boolean; // Whether exports are completed (for GHES mode)
+  migrationStarted?: boolean; // Whether migration has started (for GHES mode)
 }
 
 interface ScanOrgModalProps {
@@ -51,9 +53,10 @@ interface EnvironmentInfoModalProps {
   targetOrganization: string;
 }
 
-function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false, isGHESMode = false }: ResetConfirmationModalProps) {
+function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false, isGHESMode = false, exportCompleted = false, migrationStarted = false }: ResetConfirmationModalProps) {
   const [isResetting, setIsResetting] = useState(false);
-  const [resetExport, setResetExport] = useState(false);
+  // In GHES mode: default to checked if export completed but migration not started, otherwise unchecked
+  const [resetExport, setResetExport] = useState(isGHESMode && exportCompleted && !migrationStarted);
 
   const handleReset = async () => {
     setIsResetting(true);
@@ -80,8 +83,11 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
           <p className="form-help">This will:</p>
           <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
             <li>Delete the target repository if it exists</li>
-            {hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
-            {!hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
+            {isGHESMode && resetExport && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
+            {isGHESMode && resetExport && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
+            {isGHESMode && !resetExport && <li><strong>Source repositories will remain locked</strong> (uncheck "Reset Export" to unlock)</li>}
+            {!isGHESMode && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
+            {!isGHESMode && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
             <li>Clear migration IDs</li>
             <li>Reset the migration state</li>
             <li>Set repository visibility to private</li>
@@ -100,7 +106,7 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
                 <span className="form-checkbox-label">Reset Export</span>
               </label>
               <div className="form-help">
-                If checked, this will also clear the export data, requiring a new export before the next migration can be started.
+                If checked, this will also clear the export data and unlock source repositories, requiring a new export before the next migration can be started. If unchecked, export data will be preserved and source repositories will remain locked.
               </div>
             </div>
           )}
@@ -983,8 +989,12 @@ export default function App() {
         console.log('Delete result:', deleteResult);
       }
 
+      // In GHES mode, only unlock if resetExport is true
+      // In GH mode, always unlock
+      const shouldUnlock = isGHESMode ? resetExport : true;
+      
       // Unlock source repository if it was locked
-      if (repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
+      if (shouldUnlock && repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
         console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
         const unlockResult = await client.queries.unlockSourceRepo({
           sourceRepositoryUrl: repo.sourceRepositoryUrl,
@@ -1000,7 +1010,7 @@ export default function App() {
         state: 'reset',
         migrationSourceId: null,
         repositoryMigrationId: null,
-        lockSource: false,
+        lockSource: shouldUnlock ? false : repo.lockSource, // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: null,
       };
@@ -1022,12 +1032,13 @@ export default function App() {
     } catch (error) {
       console.error('Error resetting repository:', error);
       // Still update the state even if the API calls failed
+      const shouldUnlock = isGHESMode ? resetExport : true;
       const updateFields: Record<string, string | boolean | null> = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
         repositoryMigrationId: null,
-        lockSource: false,
+        lockSource: shouldUnlock ? false : repo.lockSource, // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: error instanceof Error ? error.message : 'Error during reset',
       };
@@ -2131,18 +2142,41 @@ export default function App() {
           repositoryCount={1}
           hasLockedRepos={resetRepo.lockSource || false}
           isGHESMode={isGHESMode}
+          exportCompleted={
+            isGHESMode && 
+            resetRepo.gitSourceExportState === 'exported' && 
+            resetRepo.metadataExportState === 'exported'
+          }
+          migrationStarted={
+            isGHESMode && 
+            resetRepo.state !== 'pending' && 
+            resetRepo.state !== 'reset' &&
+            resetRepo.state !== null
+          }
         />
       )}
 
-      {showBulkResetConfirmation && (
-        <ResetConfirmationModal
-          onClose={() => setShowBulkResetConfirmation(false)}
-          onConfirm={handleResetSelected}
-          repositoryCount={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').length}
-          hasLockedRepos={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').some(r => r.lockSource)}
-          isGHESMode={isGHESMode}
-        />
-      )}
+      {showBulkResetConfirmation && (() => {
+        const selectedResetRepos = repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset');
+        const allExportsCompleted = selectedResetRepos.every(r => 
+          r.gitSourceExportState === 'exported' && r.metadataExportState === 'exported'
+        );
+        const anyMigrationStarted = selectedResetRepos.some(r => 
+          r.state !== 'pending' && r.state !== 'reset' && r.state !== null
+        );
+        
+        return (
+          <ResetConfirmationModal
+            onClose={() => setShowBulkResetConfirmation(false)}
+            onConfirm={handleResetSelected}
+            repositoryCount={selectedResetRepos.length}
+            hasLockedRepos={selectedResetRepos.some(r => r.lockSource)}
+            isGHESMode={isGHESMode}
+            exportCompleted={isGHESMode && allExportsCompleted}
+            migrationStarted={isGHESMode && anyMigrationStarted}
+          />
+        );
+      })()}
 
       {showScanOrgModal && (
         <ScanOrgModal
