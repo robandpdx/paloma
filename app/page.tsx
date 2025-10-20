@@ -1303,6 +1303,38 @@ export default function App() {
     return () => clearInterval(interval);
   }, [pollingExports, repositories, checkExportStatus, isGHESMode]);
 
+  const getMigrationButtonClass = (state?: string | null) => {
+    switch (state) {
+      case 'queued':
+      case 'in_progress':
+        return 'btn-status-in-progress';
+      case 'completed':
+        return 'btn-status-completed';
+      case 'failed':
+        return 'btn-status-failed';
+      case 'reset':
+      case 'pending':
+      default:
+        return 'btn-primary';
+    }
+  };
+
+  const getMigrationButtonText = (state?: string | null) => {
+    switch (state) {
+      case 'queued':
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      case 'reset':
+      case 'pending':
+      default:
+        return 'Start Migration';
+    }
+  };
+
   const getStatusButtonClass = (state?: string | null, exportState?: { git?: string | null; metadata?: string | null }) => {
     // For GHES mode, check export states first
     if (isGHESMode && exportState) {
@@ -1912,11 +1944,11 @@ export default function App() {
                         </button>
                         {/* Migration button for GHES mode */}
                         <button 
-                          className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
+                          className={`btn btn-sm ${getMigrationButtonClass(repo.state)}`}
                           onClick={() => handleMigrationButtonClick(repo)}
                           disabled={!canStartMigration(repo)}
                         >
-                          {getStatusButtonText(repo.state, exportState)}
+                          {getMigrationButtonText(repo.state)}
                         </button>
                       </>
                     ) : (
