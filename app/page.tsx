@@ -1710,7 +1710,23 @@ export default function App() {
     );
     
     for (const repo of selectedRepoObjects) {
-      await startMigration(repo);
+      // In GHES mode, check if we need to start export first
+      if (isGHESMode) {
+        const gitExported = repo.gitSourceExportState === 'exported';
+        const metadataExported = repo.metadataExportState === 'exported';
+        const exportsCompleted = gitExported && metadataExported;
+        
+        if (!exportsCompleted) {
+          // Start export if not yet completed
+          await startExport(repo);
+        } else {
+          // Exports are completed, start migration
+          await startMigration(repo);
+        }
+      } else {
+        // GH mode: directly start migration
+        await startMigration(repo);
+      }
     }
   };
 
