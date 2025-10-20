@@ -43,9 +43,12 @@ interface Migration {
 
 /**
  * Parse a GitHub repository URL to extract owner and repo name
+ * Supports both github.com and GHES instance URLs
  */
 function parseRepoUrl(repoUrl: string): { owner: string; repo: string } {
-  const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+  // Match pattern: https://{domain}/{owner}/{repo}
+  // Works for both github.com and GHES instances (e.g., myghes.com, robandpdx-01b9b54bfa856f83a.ghe-test.org)
+  const match = repoUrl.match(/https?:\/\/[^\/]+\/([^\/]+)\/([^\/]+)/);
   if (!match) {
     throw new Error(`Invalid GitHub repository URL: ${repoUrl}`);
   }
