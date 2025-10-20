@@ -842,6 +842,11 @@ export default function App() {
     setPollingRepos(prev => new Set(prev).add(repoId));
   }, []);
 
+  // Define startExportPolling before it's used
+  const startExportPolling = useCallback((_repoId: string, _organizationName: string) => {
+    setPollingExports(prev => new Set(prev).add(_repoId));
+  }, []);
+
   useEffect(() => {
     const subscription = client.models.RepositoryMigration.observeQuery().subscribe({
       next: (data) => setRepositories([...data.items]),
@@ -1122,10 +1127,6 @@ export default function App() {
       });
     }
   };
-
-  const startExportPolling = useCallback((_repoId: string, _organizationName: string) => {
-    setPollingExports(prev => new Set(prev).add(_repoId));
-  }, []);
 
   const checkMigrationStatus = useCallback(async (repoId: string, migrationId: string) => {
     try {
