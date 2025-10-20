@@ -8,5 +8,7 @@ export const startMigration = defineFunction({
     TARGET_ORGANIZATION: process.env.TARGET_ORGANIZATION || '',
     SOURCE_ADMIN_TOKEN: process.env.SOURCE_ADMIN_TOKEN || '',
     TARGET_ADMIN_TOKEN: process.env.TARGET_ADMIN_TOKEN || '',
+    MODE: process.env.MODE || 'GH',
+    GHES_API_URL: process.env.GHES_API_URL || '',
   }
 });

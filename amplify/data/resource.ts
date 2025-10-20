@@ -5,6 +5,8 @@ import { getOwnerId } from "../functions/get-owner-id/resource.js";
 import { deleteTargetRepo } from "../functions/delete-target-repo/resource.js";
 import { unlockSourceRepo } from "../functions/unlock-source-repo/resource.js";
 import { scanSourceOrg } from "../functions/scan-source-org/resource.js";
+import { startExport } from "../functions/start-export/resource.js";
+import { checkExportStatus } from "../functions/check-export-status/resource.js";
 
 const schema = a.schema({
   // Repository Migration tracking model
@@ -20,6 +22,14 @@ const schema = a.schema({
       lockSource: a.boolean(), // Whether to lock the source repository during migration
       repositoryVisibility: a.string(), // 'private', 'public', or 'internal'
       archived: a.boolean(), // Whether the repository is archived
+      // GHES export fields
+      gitSourceExportId: a.string(), // Export ID for git source data
+      metadataExportId: a.string(), // Export ID for metadata
+      gitSourceExportState: a.string(), // State of git source export: 'pending', 'exporting', 'exported', 'failed'
+      metadataExportState: a.string(), // State of metadata export: 'pending', 'exporting', 'exported', 'failed'
+      gitSourceArchiveUrl: a.string(), // Short-lived URL to git source archive
+      metadataArchiveUrl: a.string(), // Short-lived URL to metadata archive
+      exportFailureReason: a.string(), // Reason for export failure
     })
     .authorization((allow) => [allow.publicApiKey()]),
   
@@ -33,6 +43,8 @@ const schema = a.schema({
       continueOnError: a.boolean(),
       lockSource: a.boolean(),
       destinationOwnerId: a.string(), // Optional: reuse if already known
+      gitSourceArchiveUrl: a.string(), // Optional: for GHES mode
+      metadataArchiveUrl: a.string(), // Optional: for GHES mode
     })
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
@@ -80,6 +92,27 @@ const schema = a.schema({
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(scanSourceOrg)),
+  
+  startExport: a
+    .query()
+    .arguments({
+      organizationName: a.string().required(),
+      repositoryNames: a.string().array().required(),
+      lockSource: a.boolean(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(startExport)),
+  
+  checkExportStatus: a
+    .query()
+    .arguments({
+      organizationName: a.string().required(),
+      exportId: a.string().required(),
+    })
+    .returns(a.json())
+    .authorization((allow) => [allow.publicApiKey()])
+    .handler(a.handler.function(checkExportStatus)),
 });
 
 export type Schema = ClientSchema<typeof schema>;

@@ -49,6 +49,8 @@ interface MigrationArguments {
   continueOnError?: boolean;
   lockSource?: boolean;
   destinationOwnerId?: string; // Optional: reuse if already known
+  gitSourceArchiveUrl?: string; // Optional: for GHES mode
+  metadataArchiveUrl?: string; // Optional: for GHES mode
 }
 
 interface MigrationEvent {
@@ -114,15 +116,20 @@ async function getOwnerId(organizationLogin: string, token: string): Promise<str
 async function createMigrationSource(
   name: string,
   ownerId: string,
-  token: string
+  token: string,
+  mode: string = 'GH'
 ): Promise<string> {
+  // Both GH and GHES use GITHUB_ARCHIVE type, but with different URLs
+  const sourceType = 'GITHUB_ARCHIVE';
+  const sourceUrl = mode === 'GHES' ? (process.env.GHES_API_URL || 'https://github.com') : 'https://github.com';
+  
   const mutation = `
-    mutation createMigrationSource($name: String!, $ownerId: ID!) {
+    mutation createMigrationSource($name: String!, $ownerId: ID!, $url: String!, $type: MigrationSourceType!) {
       createMigrationSource(input: {
         name: $name,
-        url: "https://github.com",
+        url: $url,
         ownerId: $ownerId,
-        type: GITHUB_ARCHIVE
+        type: $type
       }) {
         migrationSource {
           id
@@ -134,7 +141,7 @@ async function createMigrationSource(
     }
   `;
 
-  const variables = { name, ownerId };
+  const variables = { name, ownerId, url: sourceUrl, type: sourceType };
   const response = await makeGraphQLRequest<CreateMigrationSourceData>(mutation, variables, token);
 
   if (response.errors) {
@@ -160,7 +167,9 @@ async function startRepositoryMigration(
   targetToken: string,
   targetRepoVisibility: string = 'private',
   continueOnError: boolean = true,
-  lockSource?: boolean
+  lockSource?: boolean,
+  gitSourceArchiveUrl?: string,
+  metadataArchiveUrl?: string
 ): Promise<StartRepositoryMigrationData> {
   // Ensure targetRepoVisibility has a valid value
   const visibility = targetRepoVisibility || 'private';
@@ -175,7 +184,9 @@ async function startRepositoryMigration(
       $accessToken: String!,
       $githubPat: String!,
       $targetRepoVisibility: String!,
-      $lockSource: Boolean
+      $lockSource: Boolean,
+      $gitArchiveUrl: String,
+      $metadataArchiveUrl: String
     ) {
       startRepositoryMigration(input: {
         sourceId: $sourceId,
@@ -186,7 +197,9 @@ async function startRepositoryMigration(
         githubPat: $githubPat,
         targetRepoVisibility: $targetRepoVisibility,
         sourceRepositoryUrl: $sourceRepositoryUrl,
-        lockSource: $lockSource
+        lockSource: $lockSource,
+        gitArchiveUrl: $gitArchiveUrl,
+        metadataArchiveUrl: $metadataArchiveUrl
       }) {
         repositoryMigration {
           id
@@ -211,6 +224,8 @@ async function startRepositoryMigration(
     githubPat: targetToken,
     targetRepoVisibility: visibility,
     lockSource,
+    gitArchiveUrl: gitSourceArchiveUrl,
+    metadataArchiveUrl: metadataArchiveUrl,
   };
 
   const response = await makeGraphQLRequest<StartRepositoryMigrationData>(mutation, variables, targetToken);
@@ -238,6 +253,8 @@ async function startRepositoryMigration(
  *     continueOnError?: boolean;     // Defaults to true
  *     lockSource?: boolean;          // Lock the source repository during migration
  *     destinationOwnerId?: string;   // Optional: reuse if already known to avoid API call
+ *     gitSourceArchiveUrl?: string;  // Optional: for GHES mode
+ *     metadataArchiveUrl?: string;   // Optional: for GHES mode
  *   }
  * }
  */
@@ -252,6 +269,7 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     const TARGET_ORGANIZATION = process.env.TARGET_ORGANIZATION;
     const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
     const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
+    const MODE = process.env.MODE || 'GH';
 
     if (!TARGET_ORGANIZATION) {
       throw new Error('TARGET_ORGANIZATION environment variable is not set');
@@ -261,6 +279,13 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     }
     if (!TARGET_ADMIN_TOKEN) {
       throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
+    }
+    
+    // For GHES mode, validate archive URLs are provided
+    if (MODE === 'GHES') {
+      if (!args.gitSourceArchiveUrl || !args.metadataArchiveUrl) {
+        throw new Error('For GHES mode, gitSourceArchiveUrl and metadataArchiveUrl are required');
+      }
     }
 
     // Validate event parameters
@@ -289,7 +314,8 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
     const sourceId = await createMigrationSource(
       migrationSourceName,
       ownerId,
-      TARGET_ADMIN_TOKEN
+      TARGET_ADMIN_TOKEN,
+      MODE
     );
     console.log(`Migration Source ID: ${sourceId}`);
 
@@ -304,7 +330,9 @@ export const handler: Handler = async (event: MigrationEvent, context) => {
       TARGET_ADMIN_TOKEN,
       args.targetRepoVisibility || 'private',
       args.continueOnError !== undefined ? args.continueOnError : true,
-      args.lockSource
+      args.lockSource,
+      args.gitSourceArchiveUrl,
+      args.metadataArchiveUrl
     );
 
     console.log('Migration started successfully:', JSON.stringify(migrationData, null, 2));

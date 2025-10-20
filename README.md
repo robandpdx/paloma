@@ -24,11 +24,31 @@ This application provides a complete solution for managing GitHub repository mig
 - **Target organization visibility**: Displays the target organization to ensure users know where repos are migrating
 - **Migration details**: Click status buttons to view complete migration information
 - **Failure handling**: View detailed error messages when migrations fail
+- **GHES Support**: Two-phase migration workflow for GitHub Enterprise Server (version 3.8+)
+
+### Migration Modes
+
+The application supports two migration modes:
+
+#### GitHub.com Mode (Default)
+- Single-step migration process with "Start Migration" button
+- Direct migration from GitHub.com to GitHub Enterprise Cloud
+
+#### GitHub Enterprise Server (GHES) Mode
+- Two-phase migration process: Export → Migration
+- **Phase 1: Export** - Click "Start Export" to initiate parallel exports of git source and metadata from GHES
+- **Phase 2: Migration** - After exports complete, click "Start Migration" to begin the migration to GitHub Enterprise Cloud
+- Export archives are automatically uploaded to blob storage by GHES (version 3.8+)
+- No manual download/upload required
+
+To enable GHES mode, set the `MODE` environment variable to `GHES` and configure `GHES_API_URL` with your GHES instance API endpoint.
 
 ### Functions
 
-1. **start-migration**: Initiates a repository migration from GitHub.com to GitHub Enterprise Cloud
+1. **start-migration**: Initiates a repository migration from GitHub.com to GitHub Enterprise Cloud, or from GitHub Enterprise Server to GitHub Enterprise Cloud (when in GHES mode)
 2. **check-migration-status**: Checks the current status of an in-progress migration
+3. **start-export**: (GHES mode only) Initiates parallel exports of git source and metadata from GitHub Enterprise Server
+4. **check-export-status**: (GHES mode only) Checks the status of export operations and retrieves archive URLs
 
 ### UI Features
 
@@ -56,8 +76,10 @@ This application includes a Lambda function (`start-migration`) that automates G
 
 1. **Set up environment variables** in Amplify Console:
    - `TARGET_ORGANIZATION` - Target GitHub organization name (displayed in the UI)
-   - `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com
+   - `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com or GHES
    - `TARGET_ADMIN_TOKEN` - Personal Access Token for target GHEC
+   - `MODE` - (Optional) Set to `GHES` for GitHub Enterprise Server migrations, or `GH` (default) for GitHub.com migrations
+   - `GHES_API_URL` - (Required for GHES mode) API endpoint for your GHES instance (e.g., `https://myghes.com/api/v3`)
 
 2. **Deploy the application** (see deployment section below)
 
@@ -65,10 +87,19 @@ This application includes a Lambda function (`start-migration`) that automates G
    - The target organization is displayed below the page title
    - Click "Add Repository" to add a new repository for migration
    - Check "Lock source repository" option to prevent modifications during migration
+   
+   **For GitHub.com migrations (default MODE='GH'):**
    - Click the "Start Migration" button (green) to begin the migration process
+   
+   **For GHES migrations (MODE='GHES'):**
+   - Click the "Start Export" button to begin exporting git source and metadata from GHES
+   - Monitor export progress - the button will show "Exporting" status
+   - Once exports complete, click "Start Migration" to begin the migration to GHEC
+   
    - Click the settings gear icon (⚙️) to manage repository settings before migration
    - Monitor status via the status button that changes color and text based on state
-   - Click status buttons (except "Start Migration") to view migration details
+   - Click status buttons (except "Start Migration" and "Start Export") to view migration/export details
+   - Use the "Reset" button to reset repositories (with optional "Reset Export" for GHES mode)
    - Use the Delete button to remove repositories from the list
 
 4. **Or call the functions programmatically** from your frontend:
@@ -118,9 +149,18 @@ To start the app locally, run `npm run dev`
 For local development, create a `.env.local` file in the root directory with the following variables:
 ```
 TARGET_ORGANIZATION=your-target-organization
+MODE=GH
+# For GHES mode, also add:
+# MODE=GHES
+# GHES_API_URL=https://your-ghes-instance.com/api/v3
 ```
 
-For production deployment in Amplify Console, set the `TARGET_ORGANIZATION` environment variable in the app settings. The `next.config.js` file is configured to embed this environment variable at build time, ensuring it's available in the deployed static app.
+For production deployment in Amplify Console, set the following environment variables in the app settings:
+- `TARGET_ORGANIZATION` - Your target organization
+- `MODE` - Migration mode (`GH` or `GHES`)
+- `GHES_API_URL` - (GHES mode only) Your GHES API endpoint
+
+The `next.config.js` file is configured to embed these environment variables at build time, ensuring they're available in the deployed static app.
 
 **Note**: The `TARGET_ORGANIZATION` environment variable is embedded into the JavaScript bundle during the build process. After deploying or changing this environment variable in Amplify Console, you must trigger a new build for the changes to take effect.
 

@@ -33,9 +33,12 @@ interface BulkSettingsModalProps {
 
 interface ResetConfirmationModalProps {
   onClose: () => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: (resetExport: boolean) => Promise<void>;
   repositoryCount: number;
   hasLockedRepos?: boolean;
+  isGHESMode?: boolean;
+  exportCompleted?: boolean; // Whether exports are completed (for GHES mode)
+  migrationStarted?: boolean; // Whether migration has started (for GHES mode)
 }
 
 interface ScanOrgModalProps {
@@ -50,12 +53,14 @@ interface EnvironmentInfoModalProps {
   targetOrganization: string;
 }
 
-function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false }: ResetConfirmationModalProps) {
+function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false, isGHESMode = false, exportCompleted = false, migrationStarted = false }: ResetConfirmationModalProps) {
   const [isResetting, setIsResetting] = useState(false);
+  // In GHES mode: default to checked if export completed but migration not started, otherwise unchecked
+  const [resetExport, setResetExport] = useState(isGHESMode && exportCompleted && !migrationStarted);
 
   const handleReset = async () => {
     setIsResetting(true);
-    await onConfirm();
+    await onConfirm(resetExport);
     setIsResetting(false);
     onClose();
   };
@@ -78,13 +83,33 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
           <p className="form-help">This will:</p>
           <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
             <li>Delete the target repository if it exists</li>
-            {hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
-            {!hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
+            {isGHESMode && resetExport && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
+            {isGHESMode && resetExport && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
+            {isGHESMode && !resetExport && <li><strong>Source repositories will remain locked</strong> (check "Reset Export" to unlock)</li>}
+            {!isGHESMode && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
+            {!isGHESMode && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
             <li>Clear migration IDs</li>
             <li>Reset the migration state</li>
             <li>Set repository visibility to private</li>
             <li>Clear lock source repository setting</li>
           </ul>
+          {isGHESMode && (
+            <div className="form-group" style={{ marginTop: '16px' }}>
+              <label className="form-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  className="form-checkbox"
+                  checked={resetExport}
+                  onChange={(e) => setResetExport(e.target.checked)}
+                  disabled={isResetting}
+                />
+                <span className="form-checkbox-label">Reset Export</span>
+              </label>
+              <div className="form-help">
+                If checked, this will also clear the export data and unlock source repositories, requiring a new export before the next migration can be started. If unchecked, export data will be preserved and source repositories will remain locked.
+              </div>
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           <button className="btn btn-default" onClick={handleClose} disabled={isResetting}>Cancel</button>
@@ -509,9 +534,10 @@ function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }
 interface InfoModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
+  isGHESMode?: boolean;
 }
 
-function InfoModal({ repository, onClose }: InfoModalProps) {
+function InfoModal({ repository, onClose, isGHESMode = false }: InfoModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -550,6 +576,82 @@ function InfoModal({ repository, onClose }: InfoModalProps) {
             
             <div className="info-label">Repository Visibility:</div>
             <div className="info-value">{repository.repositoryVisibility || 'private'}</div>
+            
+            <div className="info-label">Lock source repository:</div>
+            <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ExportDetailsModalProps {
+  repository: RepositoryMigration;
+  onClose: () => void;
+}
+
+function ExportDetailsModal({ repository, onClose }: ExportDetailsModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Export Details</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="info-grid">
+            <div className="info-label">Repository Name:</div>
+            <div className="info-value">{repository.repositoryName}</div>
+            
+            <div className="info-label">Source URL:</div>
+            <div className="info-value">{repository.sourceRepositoryUrl}</div>
+            
+            <div className="info-label">Git Source Export State:</div>
+            <div className="info-value">{repository.gitSourceExportState || 'Not started'}</div>
+            
+            <div className="info-label">Metadata Export State:</div>
+            <div className="info-value">{repository.metadataExportState || 'Not started'}</div>
+            
+            {repository.gitSourceExportId && (
+              <>
+                <div className="info-label">Git Source Export ID:</div>
+                <div className="info-value">{repository.gitSourceExportId}</div>
+              </>
+            )}
+            
+            {repository.metadataExportId && (
+              <>
+                <div className="info-label">Metadata Export ID:</div>
+                <div className="info-value">{repository.metadataExportId}</div>
+              </>
+            )}
+            
+            {repository.gitSourceArchiveUrl && (
+              <>
+                <div className="info-label">Git Source Archive:</div>
+                <div className="info-value">Available</div>
+              </>
+            )}
+            
+            {repository.metadataArchiveUrl && (
+              <>
+                <div className="info-label">Metadata Archive:</div>
+                <div className="info-value">Available</div>
+              </>
+            )}
+            
+            {repository.exportFailureReason && (
+              <>
+                <div className="info-label">Export Failure Reason:</div>
+                <div className="info-value" style={{ color: 'var(--color-danger-fg)' }}>
+                  {repository.exportFailureReason}
+                </div>
+              </>
+            )}
             
             <div className="info-label">Lock source repository:</div>
             <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
@@ -753,11 +855,14 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showScanOrgModal, setShowScanOrgModal] = useState(false);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
+  const [exportInfoRepo, setExportInfoRepo] = useState<RepositoryMigration | null>(null);
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [resetRepo, setResetRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
   const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
   const pollingReposRef = useRef<Set<string>>(new Set());
+  const [pollingExports, setPollingExports] = useState<Set<string>>(new Set());
+  const pollingExportsRef = useRef<Set<string>>(new Set());
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
   const [showBulkResetConfirmation, setShowBulkResetConfirmation] = useState(false);
@@ -769,15 +874,27 @@ export default function App() {
   const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
   const targetDescription = process.env.NEXT_PUBLIC_TARGET_DESCRIPTION || 'Not configured';
   const sourceDescription = process.env.NEXT_PUBLIC_SOURCE_DESCRIPTION || 'Not configured';
+  const mode = process.env.NEXT_PUBLIC_MODE || 'GH';
+  const isGHESMode = mode === 'GHES';
 
   // Keep ref in sync with state
   useEffect(() => {
     pollingReposRef.current = pollingRepos;
   }, [pollingRepos]);
 
+  // Keep export polling ref in sync with state
+  useEffect(() => {
+    pollingExportsRef.current = pollingExports;
+  }, [pollingExports]);
+
   // Define startPolling before it's used in effects
-  const startPolling = useCallback((repoId: string, migrationId: string) => {
+  const startPolling = useCallback((repoId: string, _migrationId: string) => {
     setPollingRepos(prev => new Set(prev).add(repoId));
+  }, []);
+
+  // Define startExportPolling before it's used
+  const startExportPolling = useCallback((_repoId: string, _organizationName: string) => {
+    setPollingExports(prev => new Set(prev).add(_repoId));
   }, []);
 
   useEffect(() => {
@@ -796,8 +913,23 @@ export default function App() {
       if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
         startPolling(repo.id, repo.repositoryMigrationId);
       }
+      
+      // Start export polling for repositories with exports in progress
+      if (isGHESMode && repo.gitSourceExportId && repo.metadataExportId && !pollingExportsRef.current.has(repo.id)) {
+        const gitSourceInProgress = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+        const metadataInProgress = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+        
+        if (gitSourceInProgress || metadataInProgress) {
+          // Extract organization name from source URL
+          const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
+          if (match) {
+            const organizationName = match[1];
+            startExportPolling(repo.id, organizationName);
+          }
+        }
+      }
     });
-  }, [repositories, startPolling]);
+  }, [repositories, startPolling, startExportPolling, isGHESMode]);
 
   // Keep settingsRepo in sync with repositories array when data changes
   useEffect(() => {
@@ -846,7 +978,7 @@ export default function App() {
     });
   };
 
-  const resetRepository = async (repo: RepositoryMigration) => {
+  const resetRepository = async (repo: RepositoryMigration, resetExport: boolean = false) => {
     try {
       // Delete target repository if migration was started
       if (repo.repositoryName) {
@@ -857,41 +989,80 @@ export default function App() {
         console.log('Delete result:', deleteResult);
       }
 
+      // In GHES mode, only unlock if resetExport is true
+      // In GH mode, always unlock
+      const shouldUnlock = isGHESMode ? resetExport : true;
+      
       // Unlock source repository if it was locked
-      if (repo.lockSource && repo.sourceRepositoryUrl && repo.migrationSourceId && repo.repositoryName) {
-        console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
-        const unlockResult = await client.queries.unlockSourceRepo({
-          sourceRepositoryUrl: repo.sourceRepositoryUrl,
-          migrationSourceId: repo.migrationSourceId,
-          repositoryName: repo.repositoryName,
-        });
-        console.log('Unlock result:', unlockResult);
+      // In GHES mode (after export), we only need sourceRepositoryUrl
+      // In GH mode (after migration), we need migrationSourceId and repositoryName as well
+      if (shouldUnlock && repo.lockSource && repo.sourceRepositoryUrl) {
+        // Only call unlock if we have the required fields based on the mode and state
+        const hasRequiredFields = isGHESMode 
+          ? true  // In GHES mode, sourceRepositoryUrl is sufficient
+          : (repo.migrationSourceId && repo.repositoryName); // In GH mode, need migration fields
+        
+        if (hasRequiredFields) {
+          console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
+          const unlockResult = await client.queries.unlockSourceRepo({
+            sourceRepositoryUrl: repo.sourceRepositoryUrl,
+            migrationSourceId: repo.migrationSourceId || '',
+            repositoryName: repo.repositoryName || '',
+          });
+          console.log('Unlock result:', unlockResult);
+        }
       }
 
       // Update the repository record
-      await client.models.RepositoryMigration.update({
+      const updateFields: Record<string, string | boolean | null> = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
         repositoryMigrationId: null,
-        lockSource: false,
+        lockSource: shouldUnlock ? false : repo.lockSource, // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: null,
-      });
+      };
+
+      // If resetExport is true, also clear export fields
+      if (resetExport) {
+        updateFields.gitSourceExportId = null;
+        updateFields.metadataExportId = null;
+        updateFields.gitSourceExportState = null;
+        updateFields.metadataExportState = null;
+        updateFields.gitSourceArchiveUrl = null;
+        updateFields.metadataArchiveUrl = null;
+        updateFields.exportFailureReason = null;
+      }
+
+      await client.models.RepositoryMigration.update(updateFields);
 
       console.log('Repository reset successfully');
     } catch (error) {
       console.error('Error resetting repository:', error);
       // Still update the state even if the API calls failed
-      await client.models.RepositoryMigration.update({
+      const shouldUnlock = isGHESMode ? resetExport : true;
+      const updateFields: Record<string, string | boolean | null> = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
         repositoryMigrationId: null,
-        lockSource: false,
+        lockSource: shouldUnlock ? false : repo.lockSource, // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: error instanceof Error ? error.message : 'Error during reset',
-      });
+      };
+
+      if (resetExport) {
+        updateFields.gitSourceExportId = null;
+        updateFields.metadataExportId = null;
+        updateFields.gitSourceExportState = null;
+        updateFields.metadataExportState = null;
+        updateFields.gitSourceArchiveUrl = null;
+        updateFields.metadataArchiveUrl = null;
+        updateFields.exportFailureReason = null;
+      }
+
+      await client.models.RepositoryMigration.update(updateFields);
     }
   };
 
@@ -903,6 +1074,12 @@ export default function App() {
         state: 'queued',
       });
 
+      // For GHES mode, pass archive URLs
+      const ghesParams = isGHESMode ? {
+        gitSourceArchiveUrl: repo.gitSourceArchiveUrl || undefined,
+        metadataArchiveUrl: repo.metadataArchiveUrl || undefined,
+      } : {};
+
       // Call the startMigration function
       // Pass destinationOwnerId if it exists to skip the API call to fetch it
       const result = await client.queries.startMigration({
@@ -912,6 +1089,7 @@ export default function App() {
         continueOnError: true,
         lockSource: repo.lockSource || false,
         destinationOwnerId: repo.destinationOwnerId || undefined,
+        ...ghesParams,
       });
 
       console.log('Migration started:', result);
@@ -948,6 +1126,69 @@ export default function App() {
         id: repo.id,
         state: 'failed',
         failureReason: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  };
+
+  const startExport = async (repo: RepositoryMigration) => {
+    try {
+      // Extract organization name from source URL
+      const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
+      if (!match) {
+        throw new Error('Could not extract organization name from source URL');
+      }
+      const organizationName = match[1];
+
+      // Optimistic update: Set export states to pending
+      await client.models.RepositoryMigration.update({
+        id: repo.id,
+        gitSourceExportState: 'pending',
+        metadataExportState: 'pending',
+      });
+
+      // Call the startExport function
+      const result = await client.queries.startExport({
+        organizationName,
+        repositoryNames: [repo.repositoryName],
+        lockSource: repo.lockSource || false,
+      });
+
+      console.log('Export started:', result);
+
+      if (result.data) {
+        // Parse the outer JSON wrapper
+        const lambdaResponse = JSON.parse(result.data as string);
+        // Parse the inner body JSON
+        const response = JSON.parse(lambdaResponse.body);
+        
+        if (response.success) {
+          // Update with export IDs and states
+          await client.models.RepositoryMigration.update({
+            id: repo.id,
+            gitSourceExportId: String(response.gitSourceExportId),
+            metadataExportId: String(response.metadataExportId),
+            gitSourceExportState: response.gitSourceExportState,
+            metadataExportState: response.metadataExportState,
+          });
+
+          // Start polling for export status
+          startExportPolling(repo.id, organizationName);
+        } else {
+          await client.models.RepositoryMigration.update({
+            id: repo.id,
+            gitSourceExportState: 'failed',
+            metadataExportState: 'failed',
+            exportFailureReason: response.message || 'Failed to start export',
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error starting export:', error);
+      await client.models.RepositoryMigration.update({
+        id: repo.id,
+        gitSourceExportState: 'failed',
+        metadataExportState: 'failed',
+        exportFailureReason: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   };
@@ -997,6 +1238,56 @@ export default function App() {
     }
   }, []);
 
+  const checkExportStatus = useCallback(async (repoId: string, organizationName: string, gitSourceExportId: string, metadataExportId: string) => {
+    try {
+      // Check git source export status
+      const gitSourceResult = await client.queries.checkExportStatus({
+        organizationName,
+        exportId: gitSourceExportId,
+      });
+
+      // Check metadata export status
+      const metadataResult = await client.queries.checkExportStatus({
+        organizationName,
+        exportId: metadataExportId,
+      });
+
+      if (gitSourceResult.data && metadataResult.data) {
+        // Parse responses
+        const gitSourceLambdaResponse = JSON.parse(gitSourceResult.data as string);
+        const gitSourceResponse = JSON.parse(gitSourceLambdaResponse.body);
+        
+        const metadataLambdaResponse = JSON.parse(metadataResult.data as string);
+        const metadataResponse = JSON.parse(metadataLambdaResponse.body);
+        
+        if (gitSourceResponse.success && metadataResponse.success) {
+          // Update repository with current export states
+          await client.models.RepositoryMigration.update({
+            id: repoId,
+            gitSourceExportState: gitSourceResponse.state,
+            metadataExportState: metadataResponse.state,
+            gitSourceArchiveUrl: gitSourceResponse.archiveUrl || undefined,
+            metadataArchiveUrl: metadataResponse.archiveUrl || undefined,
+          });
+
+          // Stop polling if both exports are complete or failed
+          const gitSourceComplete = gitSourceResponse.state === 'exported' || gitSourceResponse.state === 'failed';
+          const metadataComplete = metadataResponse.state === 'exported' || metadataResponse.state === 'failed';
+          
+          if (gitSourceComplete && metadataComplete) {
+            setPollingExports(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(repoId);
+              return newSet;
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking export status:', error);
+    }
+  }, []);
+
   // Polling effect
   useEffect(() => {
     if (pollingRepos.size === 0) return;
@@ -1012,7 +1303,76 @@ export default function App() {
     return () => clearInterval(interval);
   }, [pollingRepos, repositories, checkMigrationStatus]);
 
-  const getStatusButtonClass = (state?: string | null) => {
+  // Export polling effect
+  useEffect(() => {
+    if (pollingExports.size === 0 || !isGHESMode) return;
+
+    const interval = setInterval(() => {
+      repositories.forEach(repo => {
+        if (pollingExports.has(repo.id) && repo.gitSourceExportId && repo.metadataExportId) {
+          // Extract organization name from source URL
+          const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
+          if (match) {
+            const organizationName = match[1];
+            checkExportStatus(repo.id, organizationName, repo.gitSourceExportId, repo.metadataExportId);
+          }
+        }
+      });
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [pollingExports, repositories, checkExportStatus, isGHESMode]);
+
+  const getMigrationButtonClass = (state?: string | null) => {
+    switch (state) {
+      case 'queued':
+      case 'in_progress':
+        return 'btn-status-in-progress';
+      case 'completed':
+        return 'btn-status-completed';
+      case 'failed':
+        return 'btn-status-failed';
+      case 'reset':
+      case 'pending':
+      default:
+        return 'btn-primary';
+    }
+  };
+
+  const getMigrationButtonText = (state?: string | null) => {
+    switch (state) {
+      case 'queued':
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      case 'reset':
+      case 'pending':
+      default:
+        return 'Start Migration';
+    }
+  };
+
+  const getStatusButtonClass = (state?: string | null, exportState?: { git?: string | null; metadata?: string | null }) => {
+    // For GHES mode, check export states first
+    if (isGHESMode && exportState) {
+      const gitExporting = exportState.git === 'pending' || exportState.git === 'exporting';
+      const metadataExporting = exportState.metadata === 'pending' || exportState.metadata === 'exporting';
+      
+      if (gitExporting || metadataExporting) {
+        return 'btn-status-in-progress';
+      }
+      
+      const gitFailed = exportState.git === 'failed';
+      const metadataFailed = exportState.metadata === 'failed';
+      
+      if (gitFailed || metadataFailed) {
+        return 'btn-status-failed';
+      }
+    }
+    
     switch (state) {
       case 'queued':
       case 'in_progress':
@@ -1028,7 +1388,40 @@ export default function App() {
     }
   };
 
-  const getStatusButtonText = (state?: string | null) => {
+  const getStatusButtonText = (state?: string | null, exportState?: { git?: string | null; metadata?: string | null }) => {
+    // For GHES mode, check export states first
+    if (isGHESMode && exportState) {
+      const gitExporting = exportState.git === 'pending' || exportState.git === 'exporting';
+      const metadataExporting = exportState.metadata === 'pending' || exportState.metadata === 'exporting';
+      
+      if (gitExporting || metadataExporting) {
+        return 'Exporting';
+      }
+      
+      const gitFailed = exportState.git === 'failed';
+      const metadataFailed = exportState.metadata === 'failed';
+      
+      if (gitFailed || metadataFailed) {
+        return 'Export Failed';
+      }
+      
+      const gitExported = exportState.git === 'exported';
+      const metadataExported = exportState.metadata === 'exported';
+      
+      // Both exports completed, show Start Migration
+      if (gitExported && metadataExported) {
+        // If migration already started, show its state
+        if (state && state !== 'pending' && state !== 'reset') {
+          // Fall through to migration state handling
+        } else {
+          return 'Start Migration';
+        }
+      } else {
+        // Exports not complete
+        return 'Start Export';
+      }
+    }
+    
     switch (state) {
       case 'queued':
       case 'in_progress':
@@ -1038,14 +1431,144 @@ export default function App() {
       case 'failed':
         return 'Failed';
       case 'reset':
-        return 'Start Migration';
+        return isGHESMode ? 'Start Export' : 'Start Migration';
       default:
-        return 'Start Migration';
+        return isGHESMode ? 'Start Export' : 'Start Migration';
+    }
+  };
+
+  const canStartMigration = (repo: RepositoryMigration) => {
+    if (!isGHESMode) return true;
+    
+    // In GHES mode, both exports must be completed
+    return repo.gitSourceExportState === 'exported' && 
+           repo.metadataExportState === 'exported' &&
+           !!repo.gitSourceArchiveUrl &&
+           !!repo.metadataArchiveUrl;
+  };
+
+  const getExportButtonClass = (repo: RepositoryMigration) => {
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    
+    if (gitExporting || metadataExporting) {
+      return 'btn-status-in-progress';
+    }
+    
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+    
+    if (gitFailed || metadataFailed) {
+      return 'btn-status-failed';
+    }
+    
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    
+    if (gitExported && metadataExported) {
+      return 'btn-status-completed';
+    }
+    
+    return 'btn-primary';
+  };
+
+  const getExportButtonText = (repo: RepositoryMigration) => {
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    
+    if (gitExporting || metadataExporting) {
+      return 'Exporting';
+    }
+    
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+    
+    if (gitFailed || metadataFailed) {
+      return 'Export Failed';
+    }
+    
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    
+    if (gitExported && metadataExported) {
+      return 'Export Completed';
+    }
+    
+    return 'Start Export';
+  };
+
+  const handleExportButtonClick = (repo: RepositoryMigration) => {
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+    
+    // If export is in progress, failed, or completed, show details
+    if (gitExporting || metadataExporting || gitFailed || metadataFailed || (gitExported && metadataExported)) {
+      setExportInfoRepo(repo);
+    } else {
+      // Otherwise start the export
+      startExport(repo);
+    }
+  };
+
+  const handleMigrationButtonClick = (repo: RepositoryMigration) => {
+    // If migration not started, start it
+    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
+      startMigration(repo);
+    } else {
+      // Otherwise show migration details
+      setInfoRepo(repo);
     }
   };
 
   const handleStatusButtonClick = (repo: RepositoryMigration) => {
-    // If pending or reset, start the migration
+    const exportState = isGHESMode ? {
+      git: repo.gitSourceExportState,
+      metadata: repo.metadataExportState,
+    } : undefined;
+    
+    // For GHES mode, handle export states
+    if (isGHESMode && exportState) {
+      const gitExporting = exportState.git === 'pending' || exportState.git === 'exporting';
+      const metadataExporting = exportState.metadata === 'pending' || exportState.metadata === 'exporting';
+      
+      if (gitExporting || metadataExporting) {
+        // Show info modal during export
+        setInfoRepo(repo);
+        return;
+      }
+      
+      const gitFailed = exportState.git === 'failed';
+      const metadataFailed = exportState.metadata === 'failed';
+      
+      if (gitFailed || metadataFailed) {
+        // Show info modal for export failure
+        setInfoRepo(repo);
+        return;
+      }
+      
+      const gitExported = exportState.git === 'exported';
+      const metadataExported = exportState.metadata === 'exported';
+      
+      // If both exports completed and migration not started, start migration
+      if (gitExported && metadataExported && (!repo.state || repo.state === 'pending' || repo.state === 'reset')) {
+        startMigration(repo);
+        return;
+      }
+      
+      // If exports not complete, start export
+      if (!gitExported || !metadataExported) {
+        if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
+          startExport(repo);
+          return;
+        }
+      }
+    }
+    
+    // Non-GHES mode or migration already started
     if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
       startMigration(repo);
     } else {
@@ -1187,17 +1710,48 @@ export default function App() {
     );
     
     for (const repo of selectedRepoObjects) {
-      await startMigration(repo);
+      // In GHES mode, check if we need to start export first
+      if (isGHESMode) {
+        const gitExported = repo.gitSourceExportState === 'exported';
+        const metadataExported = repo.metadataExportState === 'exported';
+        const exportsCompleted = gitExported && metadataExported;
+        
+        if (!exportsCompleted) {
+          // Start export if not yet completed
+          await startExport(repo);
+        } else {
+          // Exports are completed, start migration
+          await startMigration(repo);
+        }
+      } else {
+        // GH mode: directly start migration
+        await startMigration(repo);
+      }
     }
   };
 
-  const handleResetSelected = async () => {
-    const selectedRepoObjects = repositories.filter(r => 
-      selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset'
-    );
+  const handleResetSelected = async (resetExport: boolean = false) => {
+    const selectedRepoObjects = repositories.filter(r => {
+      if (!selectedRepos.has(r.id)) return false;
+      
+      // In GH mode: exclude 'pending' and 'reset' states
+      if (!isGHESMode) {
+        return r.state !== 'pending' && r.state !== 'reset';
+      }
+      
+      // In GHES mode: allow reset if exports are completed, even if state is 'pending' or 'reset'
+      if (r.state === 'pending' || r.state === 'reset') {
+        const exportsCompleted = r.gitSourceExportState === 'exported' && 
+                                 r.metadataExportState === 'exported';
+        return exportsCompleted;
+      }
+      
+      // For other states in GHES mode, allow reset
+      return true;
+    });
     
     for (const repo of selectedRepoObjects) {
-      await resetRepository(repo);
+      await resetRepository(repo, resetExport);
     }
   };
 
@@ -1248,7 +1802,45 @@ export default function App() {
 
   const canResetSelected = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
-    return repo && repo.state !== 'pending' && repo.state !== 'reset';
+    if (!repo || repo.archived) return false;
+    
+    // In GH mode: can reset if state is not 'pending' or 'reset'
+    if (!isGHESMode) {
+      return repo.state !== 'pending' && repo.state !== 'reset';
+    }
+    
+    // In GHES mode: apply the same logic as individual Reset button
+    // Can reset if:
+    // 1. State is 'reset' AND both exports are 'exported'
+    // 2. State is 'pending' AND both exports are 'exported' (not pending/exporting)
+    // 3. State is anything else (completed, failed, in_progress)
+    
+    if (repo.state === 'reset') {
+      // Only enable if both exports are exported
+      return repo.gitSourceExportState === 'exported' && 
+             repo.metadataExportState === 'exported';
+    }
+    
+    if (repo.state === 'pending') {
+      // Only enable if exports are completed (not pending or exporting)
+      const gitExported = repo.gitSourceExportState === 'exported';
+      const metadataExported = repo.metadataExportState === 'exported';
+      const exportsCompleted = gitExported && metadataExported;
+      
+      // Disable if exports are pending or in progress
+      const exportsInProgress = 
+        !repo.gitSourceExportState || 
+        !repo.metadataExportState ||
+        repo.gitSourceExportState === 'pending' ||
+        repo.metadataExportState === 'pending' ||
+        repo.gitSourceExportState === 'exporting' ||
+        repo.metadataExportState === 'exporting';
+      
+      return !exportsInProgress && exportsCompleted;
+    }
+    
+    // For other states (completed, failed, in_progress), always enable
+    return true;
   });
 
   const canUpdateSettings = Array.from(selectedRepos).some(id => {
@@ -1410,6 +2002,10 @@ export default function App() {
             {paginatedRepositories.map((repo) => {
               const isArchived = repo.archived === true;
               const canClickStatus = isArchived && (repo.state === 'completed' || repo.state === 'failed');
+              const exportState = isGHESMode ? {
+                git: repo.gitSourceExportState,
+                metadata: repo.metadataExportState,
+              } : undefined;
               
               return (
                 <div key={repo.id} className="repository-item">
@@ -1426,27 +2022,67 @@ export default function App() {
                     <div className="repository-url">{repo.sourceRepositoryUrl}</div>
                   </div>
                   <div className="repository-actions">
-                    <button 
-                      className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
-                      onClick={() => {
-                        if (canClickStatus) {
-                          // Archived repos in completed/failed state can show info modal
-                          setInfoRepo(repo);
-                        } else if (!isArchived) {
-                          // Non-archived repos use normal handleStatusButtonClick logic
-                          handleStatusButtonClick(repo);
-                        }
-                      }}
-                      disabled={isArchived && !canClickStatus}
-                    >
-                      {getStatusButtonText(repo.state)}
-                    </button>
+                    {isGHESMode && !isArchived ? (
+                      <>
+                        {/* Export button for GHES mode */}
+                        <button 
+                          className={`btn btn-sm ${getExportButtonClass(repo)}`}
+                          onClick={() => handleExportButtonClick(repo)}
+                        >
+                          {getExportButtonText(repo)}
+                        </button>
+                        {/* Migration button for GHES mode */}
+                        <button 
+                          className={`btn btn-sm ${getMigrationButtonClass(repo.state)}`}
+                          onClick={() => handleMigrationButtonClick(repo)}
+                          disabled={!canStartMigration(repo)}
+                        >
+                          {getMigrationButtonText(repo.state)}
+                        </button>
+                      </>
+                    ) : (
+                      /* Single button for GH mode or archived repos */
+                      <button 
+                        className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
+                        onClick={() => {
+                          if (canClickStatus) {
+                            // Archived repos in completed/failed state can show info modal
+                            setInfoRepo(repo);
+                          } else if (!isArchived) {
+                            // Non-archived repos use normal handleStatusButtonClick logic
+                            handleStatusButtonClick(repo);
+                          }
+                        }}
+                        disabled={isArchived && !canClickStatus}
+                      >
+                        {getStatusButtonText(repo.state, exportState)}
+                      </button>
+                    )}
                     <button 
                       className="btn btn-danger btn-sm"
                       onClick={() => setResetRepo(repo)}
-                      disabled={isArchived || repo.state === 'pending' || repo.state === 'reset'}
-                      title={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository')}
-                      aria-label={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository')}
+                      disabled={
+                        isArchived || 
+                        (!isGHESMode && (repo.state === 'reset' || repo.state === 'pending')) ||
+                        (isGHESMode && (
+                          (repo.state === 'reset' && (
+                            !repo.gitSourceExportState || 
+                            !repo.metadataExportState ||
+                            repo.gitSourceExportState !== 'exported' ||
+                            repo.metadataExportState !== 'exported'
+                          )) ||
+                          (repo.state === 'pending' && (
+                            !repo.gitSourceExportState || 
+                            !repo.metadataExportState ||
+                            repo.gitSourceExportState === 'pending' ||
+                            repo.metadataExportState === 'pending' ||
+                            repo.gitSourceExportState === 'exporting' ||
+                            repo.metadataExportState === 'exporting'
+                          ))
+                        ))
+                      }
+                      title={isArchived ? 'Reset is not available for archived repositories' : 'Reset this repository'}
+                      aria-label={isArchived ? 'Reset is not available for archived repositories' : 'Reset this repository'}
                     >
                       Reset
                     </button>
@@ -1552,6 +2188,14 @@ export default function App() {
         <InfoModal
           repository={infoRepo}
           onClose={() => setInfoRepo(null)}
+          isGHESMode={isGHESMode}
+        />
+      )}
+
+      {exportInfoRepo && (
+        <ExportDetailsModal
+          repository={exportInfoRepo}
+          onClose={() => setExportInfoRepo(null)}
         />
       )}
 
@@ -1589,22 +2233,65 @@ export default function App() {
       {resetRepo && (
         <ResetConfirmationModal
           onClose={() => setResetRepo(null)}
-          onConfirm={async () => {
-            await resetRepository(resetRepo);
+          onConfirm={async (resetExport) => {
+            await resetRepository(resetRepo, resetExport);
           }}
           repositoryCount={1}
           hasLockedRepos={resetRepo.lockSource || false}
+          isGHESMode={isGHESMode}
+          exportCompleted={
+            isGHESMode && 
+            resetRepo.gitSourceExportState === 'exported' && 
+            resetRepo.metadataExportState === 'exported'
+          }
+          migrationStarted={
+            isGHESMode && 
+            resetRepo.state !== 'pending' && 
+            resetRepo.state !== 'reset' &&
+            resetRepo.state !== null
+          }
         />
       )}
 
-      {showBulkResetConfirmation && (
-        <ResetConfirmationModal
-          onClose={() => setShowBulkResetConfirmation(false)}
-          onConfirm={handleResetSelected}
-          repositoryCount={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').length}
-          hasLockedRepos={repositories.filter(r => selectedRepos.has(r.id) && r.state !== 'pending' && r.state !== 'reset').some(r => r.lockSource)}
-        />
-      )}
+      {showBulkResetConfirmation && (() => {
+        const selectedResetRepos = repositories.filter(r => {
+          if (!selectedRepos.has(r.id)) return false;
+          
+          // In GH mode: exclude 'pending' and 'reset' states
+          if (!isGHESMode) {
+            return r.state !== 'pending' && r.state !== 'reset';
+          }
+          
+          // In GHES mode: allow reset if exports are completed, even if state is 'pending' or 'reset'
+          if (r.state === 'pending' || r.state === 'reset') {
+            const exportsCompleted = r.gitSourceExportState === 'exported' && 
+                                     r.metadataExportState === 'exported';
+            return exportsCompleted;
+          }
+          
+          // For other states in GHES mode, allow reset
+          return true;
+        });
+        
+        const allExportsCompleted = selectedResetRepos.every(r => 
+          r.gitSourceExportState === 'exported' && r.metadataExportState === 'exported'
+        );
+        const anyMigrationStarted = selectedResetRepos.some(r => 
+          r.state !== 'pending' && r.state !== 'reset' && r.state !== null
+        );
+        
+        return (
+          <ResetConfirmationModal
+            onClose={() => setShowBulkResetConfirmation(false)}
+            onConfirm={handleResetSelected}
+            repositoryCount={selectedResetRepos.length}
+            hasLockedRepos={selectedResetRepos.some(r => r.lockSource)}
+            isGHESMode={isGHESMode}
+            exportCompleted={isGHESMode && allExportsCompleted}
+            migrationStarted={isGHESMode && anyMigrationStarted}
+          />
+        );
+      })()}
 
       {showScanOrgModal && (
         <ScanOrgModal

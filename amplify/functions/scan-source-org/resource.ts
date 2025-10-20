@@ -6,5 +6,7 @@ export const scanSourceOrg = defineFunction({
   timeoutSeconds: 60, // Allow more time for scanning large organizations
   environment: {
     SOURCE_ADMIN_TOKEN: process.env.SOURCE_ADMIN_TOKEN || '',
+    MODE: process.env.MODE || '',
+    GHES_API_URL: process.env.GHES_API_URL || '',
   }
 });
