@@ -40,6 +40,7 @@ describe('Start Migration Handler', () => {
       delete process.env.TARGET_ORGANIZATION;
       process.env.SOURCE_ADMIN_TOKEN = 'token1';
       process.env.TARGET_ADMIN_TOKEN = 'token2';
+      process.env.MODE = 'GH';
 
       const event = createMockEvent();
       const result = await handler(event, {} as any, () => {});
@@ -54,6 +55,7 @@ describe('Start Migration Handler', () => {
       process.env.TARGET_ORGANIZATION = 'test-org';
       delete process.env.SOURCE_ADMIN_TOKEN;
       process.env.TARGET_ADMIN_TOKEN = 'token2';
+      process.env.MODE = 'GH';
 
       const event = createMockEvent();
       const result = await handler(event, {} as any, () => {});
@@ -68,6 +70,7 @@ describe('Start Migration Handler', () => {
       process.env.TARGET_ORGANIZATION = 'test-org';
       process.env.SOURCE_ADMIN_TOKEN = 'token1';
       delete process.env.TARGET_ADMIN_TOKEN;
+      process.env.MODE = 'GH';
 
       const event = createMockEvent();
       const result = await handler(event, {} as any, () => {});
@@ -76,6 +79,19 @@ describe('Start Migration Handler', () => {
       const body = JSON.parse(result.body);
       expect(body.success).toBe(false);
       expect(body.message).toContain('TARGET_ADMIN_TOKEN');
+    });
+    test('should error when MODE=GHES without required GHES export IDs', async () => {
+      process.env.TARGET_ORGANIZATION = 'cloud-org';
+      process.env.SOURCE_ADMIN_TOKEN = 'token1';
+      process.env.TARGET_ADMIN_TOKEN = 'token2';
+      process.env.MODE = 'GHES';
+      process.env.GHES_API_URL = 'https://ghes.example.com/api/v3';
+
+      const event = createMockEvent();
+      const result = await handler(event as any, {} as any, () => {});
+      const body = JSON.parse(result.body);
+      expect(result.statusCode).toBe(500);
+      expect(body.message).toContain('ghesGitMigrationId');
     });
   });
 

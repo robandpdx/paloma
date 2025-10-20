@@ -7,6 +7,8 @@ import { getOwnerId } from './functions/get-owner-id/resource.js';
 import { deleteTargetRepo } from './functions/delete-target-repo/resource.js';
 import { unlockSourceRepo } from './functions/unlock-source-repo/resource.js';
 import { scanSourceOrg } from './functions/scan-source-org/resource.js';
+import { exportGhes } from './functions/export-ghes/resource.js';
+import { checkGhesExportStatus } from './functions/check-ghes-export-status/resource.js';
 
 defineBackend({
   auth,
@@ -17,4 +19,6 @@ defineBackend({
   deleteTargetRepo,
   unlockSourceRepo,
   scanSourceOrg,
+  exportGhes,
+  checkGhesExportStatus,
 });

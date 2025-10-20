@@ -20,9 +20,7 @@ interface GetMigrationData {
   };
 }
 
-interface MigrationStatusArguments {
-  migrationId: string;
-}
+interface MigrationStatusArguments { migrationId: string }
 
 interface MigrationStatusEvent {
   arguments: MigrationStatusArguments;
@@ -104,25 +102,19 @@ export const handler: Handler = async (event: MigrationStatusEvent, context) => 
     const args = event.arguments;
 
     // Validate environment variables
-    const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
+  const TARGET_ADMIN_TOKEN = process.env.TARGET_ADMIN_TOKEN;
 
     if (!TARGET_ADMIN_TOKEN) {
       throw new Error('TARGET_ADMIN_TOKEN environment variable is not set');
     }
 
-    // Validate event parameters
-    if (!args.migrationId) {
-      throw new Error('migrationId is required in the event');
-    }
-
     const migrationStatus = await getMigrationStatus(args.migrationId, TARGET_ADMIN_TOKEN);
-
     console.log('Migration status retrieved:', JSON.stringify(migrationStatus, null, 2));
-
     return {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
+        mode: 'GH',
         migrationId: migrationStatus.id,
         sourceUrl: migrationStatus.sourceUrl,
         state: migrationStatus.state,

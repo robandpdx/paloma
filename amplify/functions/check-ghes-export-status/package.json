@@ -1,0 +1,10 @@
+{
+  "name": "check-ghes-export-status-function",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lambda function to check status of GHES export migrations",
+  "main": "handler.ts",
+  "scripts": { "test": "echo 'No tests'" },
+  "license": "MIT-0",
+  "devDependencies": { "@types/aws-lambda": "^8.10.145", "@types/node": "^20" }
+}

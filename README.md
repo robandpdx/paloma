@@ -16,19 +16,30 @@ This template equips you with a foundational Next.js application integrated with
 
 ## GitHub Repository Migration
 
-This application provides a complete solution for managing GitHub repository migrations using the GitHub Enterprise Importer. It includes:
+This application provides a complete solution for managing GitHub repository migrations using the GitHub Enterprise Importer. It supports both:
 
-- **Repository tracking**: Add and manage multiple repositories for migration
-- **Migration initiation**: Start repository migrations with a unified status button
-- **Status monitoring**: Real-time status updates via color-coded status buttons
-- **Target organization visibility**: Displays the target organization to ensure users know where repos are migrating
-- **Migration details**: Click status buttons to view complete migration information
-- **Failure handling**: View detailed error messages when migrations fail
+* Standard GitHub.com → GitHub Enterprise Cloud (MODE=GH – default)
+* GitHub Enterprise Server (GHES 3.8+) → GitHub Enterprise Cloud dual‑phase exports (MODE=GHES)
 
-### Functions
+### Core UI Capabilities
+* **Repository tracking** – Add and manage multiple repositories for migration
+* **Migration initiation** – Unified status/action button
+* **Status monitoring** – Real-time color‑coded status & detail modal
+* **Target organization visibility** – Destination org rendered below title
+* **Failure handling** – Detailed error with retained context
+* **Lock source** – Optional repository lock (GitHub.com flow)
 
-1. **start-migration**: Initiates a repository migration from GitHub.com to GitHub Enterprise Cloud
-2. **check-migration-status**: Checks the current status of an in-progress migration
+### Lambda Functions (Amplify Gen2)
+| Function | Mode(s) | Purpose |
+|----------|---------|---------|
+| `start-migration` | GH & GHES | Triggers final GitHub Enterprise Importer migration (direct for GH, archive finalization for GHES) |
+| `check-migration-status` | GH & GHES | Polls final repository migration state via GraphQL |
+| `export-ghes` | GHES | Starts two GHES org migrations (git + metadata) |
+| `check-ghes-export-status` | GHES | Polls paired GHES export migrations until both exported |
+| `get-owner-id` | (internal optimization) | Caches destination ownerId to reduce GraphQL lookups |
+| `unlock-source-repo` | Optional | Unlocks a previously locked source repository (GitHub.com flow) |
+
+> The GHES export IDs (`ghesGitMigrationId`, `ghesMetadataMigrationId`) are **not server‑persisted automatically**. The frontend (or an external client) is responsible for storing them between page loads so polling can resume. (See GHES section below.)
 
 ### UI Features
 
@@ -48,9 +59,9 @@ This application provides a complete solution for managing GitHub repository mig
 - **Delete Confirmation**: Type repository URL to confirm deletion
 - **Auto-polling**: Status updates every 30 seconds after migration starts
 
-## GitHub Repository Migration
+### Programmatic Usage
 
-This application includes a Lambda function (`start-migration`) that automates GitHub repository migrations using the GitHub Enterprise Importer GraphQL API.
+The primary entry point remains `start-migration`, which wraps the GitHub Enterprise Importer GraphQL APIs. In GHES mode it additionally validates previously exported archives before starting the final migration.
 
 ### Quick Start
 
@@ -115,14 +126,79 @@ To start the app locally, run `npm run dev`
 
 ### Environment Variables
 
-For local development, create a `.env.local` file in the root directory with the following variables:
+For local development, create a `.env.local` file in the root directory with the following variables (minimum for GitHub.com source migrations):
 ```
 TARGET_ORGANIZATION=your-target-organization
+MODE=GH
 ```
 
-For production deployment in Amplify Console, set the `TARGET_ORGANIZATION` environment variable in the app settings. The `next.config.js` file is configured to embed this environment variable at build time, ensuring it's available in the deployed static app.
+If you are migrating from GitHub Enterprise Server (GHES 3.8+), also add:
+```
+MODE=GHES
+GHES_API_URL=https://your-ghes-hostname/api/v3
+```
 
-**Note**: The `TARGET_ORGANIZATION` environment variable is embedded into the JavaScript bundle during the build process. After deploying or changing this environment variable in Amplify Console, you must trigger a new build for the changes to take effect.
+Runtime / function environment variables (configure in Amplify Console or deployment pipeline):
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| TARGET_ORGANIZATION | Yes | Destination (GitHub Enterprise Cloud) organization login. Embedded in UI. |
+| SOURCE_ADMIN_TOKEN | Yes | PAT for source (GitHub.com or GHES). Must have migration + repo scopes. |
+| TARGET_ADMIN_TOKEN | Yes | PAT for target GHEC org (admin:migration + repo scopes). |
+| MODE | No (defaults to GH) | Set to `GHES` to enable GHES dual-archive migration flow. Otherwise `GH` or unset keeps existing GitHub.com flow. |
+| GHES_API_URL | When MODE=GHES | Base API URL to GHES instance (include `/api/v3`). Example: `https://myghes.internal/api/v3` |
+
+#### Client Persistence (GHES Mode)
+In GHES mode the export phase is intentionally stateless on the backend after the Lambda invocation returns. No DynamoDB/Data API writes occur automatically. Store these values client‑side (or persist them yourself) after calling `exportGhes`:
+* `ghesGitMigrationId`
+* `ghesMetadataMigrationId`
+
+You then pass them back to:
+* `checkGhesExportStatus` (polling)
+* `startMigration` (finalization) along with the original `sourceRepositoryUrl` & `repositoryName`.
+
+If IDs are lost mid‑export, re‑run `exportGhes`; duplicate export attempts are safe—the first successful pair to reach `exported` is used.
+
+### GHES Mode Flow (Separated Exports)
+
+GHES migrations now happen in two explicit phases:
+
+1. Call `exportGhes` (query: `exportGhes`) with `sourceOrganization` & `repositoryName`.
+  - Starts two GHES org migrations (git & metadata) and returns their IDs + initial states.
+2. Poll `checkGhesExportStatus` with those IDs until `exportStatus === EXPORTED_BOTH`.
+  - Custom consolidated statuses: `STARTED`, `EXPORTING`, `EXPORTING_PARTIAL`, `EXPORTED_BOTH`, `FAILED_PARTIAL`, `FAILED`.
+3. Once exported, invoke `startMigration` (MODE=GHES) providing:
+  - `repositoryName`
+  - `sourceRepositoryUrl` (original GHES repo URL)
+  - `sourceOrganization`
+  - `ghesGitMigrationId`
+  - `ghesMetadataMigrationId`
+4. The `startMigration` function validates both exports, fetches archive redirect URLs, and triggers the final GitHub Enterprise Cloud repository migration.
+5. Use `checkMigrationStatus` (standard) to monitor the final migration.
+
+Notes:
+* Only GHES 3.8+ supported (relies on 302 archive redirect URLs; no manual blob storage step required).
+* Visibility currently defaults to `private` during final migration; extend by passing `targetRepoVisibility` when feature added.
+* Frontend must persist GHES export IDs (no automatic server persistence by design for simplicity / least privilege).
+
+**Build-time embedding**: Only `TARGET_ORGANIZATION` is embedded in the Next.js bundle. Changing it requires a new build/deploy to reflect in the UI.
+
+### Testing
+
+All unit tests (Jest) live alongside their function code. A consolidated test run is available at the repo root.
+
+Quick commands:
+```
+npm install   # (first time or after dependency changes)
+npm test      # runs all function/unit tests (ts-jest)
+```
+
+Key coverage areas:
+* GH flow: validation & successful start
+* GHES flow: early argument validation, export status derivation, finalization path
+* Owner ID reuse optimization (`get-owner-id` + `start-migration`)
+
+See `docs/TESTING_GUIDE.md` for deeper manual scenarios.
 
 
 

@@ -28,7 +28,9 @@ export const handler: Handler = async (event: ScanOrgEvent, context) => {
 
   try {
     // Validate environment variables
-    const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
+  const SOURCE_ADMIN_TOKEN = process.env.SOURCE_ADMIN_TOKEN;
+  const MODE = process.env.MODE || 'GH';
+  const GHES_API_URL = process.env.GHES_API_URL; // e.g. https://myghes.com/api/v3
 
     if (!SOURCE_ADMIN_TOKEN) {
       throw new Error('SOURCE_ADMIN_TOKEN environment variable is not set');
@@ -44,6 +46,7 @@ export const handler: Handler = async (event: ScanOrgEvent, context) => {
     // Initialize Octokit
     const octokit = new Octokit({
       auth: SOURCE_ADMIN_TOKEN,
+      ...(MODE === 'GHES' && GHES_API_URL ? { baseUrl: GHES_API_URL } : {})
     });
 
     // Fetch all repositories from the organization with pagination

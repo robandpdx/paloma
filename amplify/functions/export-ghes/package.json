@@ -1,0 +1,10 @@
+{
+  "name": "export-ghes-function",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lambda function to start GHES export migrations (git + metadata)",
+  "main": "handler.ts",
+  "scripts": { "test": "echo 'No tests'" },
+  "license": "MIT-0",
+  "devDependencies": { "@types/aws-lambda": "^8.10.145", "@types/node": "^20" }
+}

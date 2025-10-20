@@ -5,6 +5,8 @@ import { getOwnerId } from "../functions/get-owner-id/resource.js";
 import { deleteTargetRepo } from "../functions/delete-target-repo/resource.js";
 import { unlockSourceRepo } from "../functions/unlock-source-repo/resource.js";
 import { scanSourceOrg } from "../functions/scan-source-org/resource.js";
+import { exportGhes } from "../functions/export-ghes/resource.js";
+import { checkGhesExportStatus } from "../functions/check-ghes-export-status/resource.js";
 
 const schema = a.schema({
   // Repository Migration tracking model
@@ -20,6 +22,12 @@ const schema = a.schema({
       lockSource: a.boolean(), // Whether to lock the source repository during migration
       repositoryVisibility: a.string(), // 'private', 'public', or 'internal'
       archived: a.boolean(), // Whether the repository is archived
+       // GHES Export tracking fields
+       ghesGitMigrationId: a.string(),
+       ghesMetadataMigrationId: a.string(),
+       ghesGitState: a.string(), // pending|exporting|exported|failed
+       ghesMetadataState: a.string(),
+       ghesExportStatus: a.string(), // NOT_STARTED|STARTED|EXPORTING|EXPORTED_BOTH|FAILED|FAILED_PARTIAL
     })
     .authorization((allow) => [allow.publicApiKey()]),
   
@@ -33,6 +41,10 @@ const schema = a.schema({
       continueOnError: a.boolean(),
       lockSource: a.boolean(),
       destinationOwnerId: a.string(), // Optional: reuse if already known
+      // GHES finalization arguments (only used when MODE=GHES)
+      ghesGitMigrationId: a.string(),
+      ghesMetadataMigrationId: a.string(),
+      sourceOrganization: a.string(),
     })
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
@@ -80,6 +92,26 @@ const schema = a.schema({
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])
     .handler(a.handler.function(scanSourceOrg)),
+    exportGhes: a
+      .query()
+      .arguments({
+        sourceOrganization: a.string().required(),
+        repositoryName: a.string().required(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.publicApiKey()])
+      .handler(a.handler.function(exportGhes)),
+    checkGhesExportStatus: a
+      .query()
+      .arguments({
+        sourceOrganization: a.string().required(),
+        repositoryName: a.string().required(),
+        gitMigrationId: a.string(),
+        metadataMigrationId: a.string(),
+      })
+      .returns(a.json())
+      .authorization((allow) => [allow.publicApiKey()])
+      .handler(a.handler.function(checkGhesExportStatus)),
 });
 
 export type Schema = ClientSchema<typeof schema>;

@@ -897,6 +897,16 @@ export default function App() {
 
   const startMigration = async (repo: RepositoryMigration) => {
     try {
+      // Frontend safeguard for GHES mode: ensure export IDs exist before calling backend
+      const isGhesModeLocal = (process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH') === 'GHES';
+      if (isGhesModeLocal && (!repo.ghesGitMigrationId || !repo.ghesMetadataMigrationId)) {
+        console.error('Refusing to start final migration: GHES export IDs missing.');
+        await client.models.RepositoryMigration.update({
+          id: repo.id,
+          failureReason: 'GHES export IDs missing; export phase must complete before final migration.',
+        });
+        return;
+      }
       // Optimistic update: Set state to queued immediately for user feedback
       await client.models.RepositoryMigration.update({
         id: repo.id,
@@ -912,6 +922,10 @@ export default function App() {
         continueOnError: true,
         lockSource: repo.lockSource || false,
         destinationOwnerId: repo.destinationOwnerId || undefined,
+        // Pass through GHES finalization identifiers if present on record
+        ghesGitMigrationId: repo.ghesGitMigrationId || undefined,
+        ghesMetadataMigrationId: repo.ghesMetadataMigrationId || undefined,
+        sourceOrganization: extractOrgFromUrl(repo.sourceRepositoryUrl) || undefined,
       });
 
       console.log('Migration started:', result);
@@ -1012,7 +1026,27 @@ export default function App() {
     return () => clearInterval(interval);
   }, [pollingRepos, repositories, checkMigrationStatus]);
 
-  const getStatusButtonClass = (state?: string | null) => {
+  // Button class mapping now considers GHES export phases distinctly
+  const getStatusButtonClass = (repo: RepositoryMigration) => {
+    const isGhesModeLocal = (process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH') === 'GHES';
+    if (isGhesModeLocal) {
+      // Export phases
+      if (!repo.ghesGitMigrationId || !repo.ghesMetadataMigrationId) {
+        // Pre-export
+        return 'btn-primary';
+      }
+      switch (repo.ghesExportStatus) {
+        case 'EXPORTING':
+        case 'EXPORTING_PARTIAL':
+          return 'btn-status-in-progress';
+        case 'EXPORTED_BOTH':
+          return 'btn-status-completed';
+        case 'FAILED_PARTIAL':
+          return 'btn-status-failed';
+      }
+    }
+    // Non-GHES or fallback to migration state
+    const state = repo.state;
     switch (state) {
       case 'queued':
       case 'in_progress':
@@ -1022,14 +1056,32 @@ export default function App() {
       case 'failed':
         return 'btn-status-failed';
       case 'reset':
+      case 'pending':
         return 'btn-primary';
       default:
         return 'btn-primary';
     }
   };
 
-  const getStatusButtonText = (state?: string | null) => {
-    switch (state) {
+  // Determine button label for each repository
+  const getStatusButtonText = (repo: RepositoryMigration) => {
+    const isGhesModeLocal = (process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH') === 'GHES';
+    if (isGhesModeLocal) {
+      // Failure or partial failure before completion
+      if (repo.ghesExportStatus === 'FAILED_PARTIAL') return 'Retry Export';
+      if (!repo.ghesGitMigrationId || !repo.ghesMetadataMigrationId) return 'Start Export';
+      if (repo.ghesExportStatus === 'EXPORTING') return 'Exporting…';
+      if (repo.ghesExportStatus === 'EXPORTING_PARTIAL') return 'Exporting (Partial)…';
+      if (repo.ghesExportStatus === 'EXPORTED_BOTH') {
+        // Ready for final migration
+        if (repo.state === 'queued' || repo.state === 'in_progress') return 'In Progress';
+        if (repo.state === 'completed') return 'Completed';
+        if (repo.state === 'failed') return 'Failed';
+        return 'Start Migration';
+      }
+    }
+    // Non-GHES flow or after final migration started
+    switch (repo.state) {
       case 'queued':
       case 'in_progress':
         return 'In Progress';
@@ -1038,18 +1090,140 @@ export default function App() {
       case 'failed':
         return 'Failed';
       case 'reset':
+      case 'pending':
         return 'Start Migration';
       default:
         return 'Start Migration';
     }
   };
 
-  const handleStatusButtonClick = (repo: RepositoryMigration) => {
-    // If pending or reset, start the migration
+  // Extract organization from any Git host URL (supports github.com and GHES custom domains)
+  // Returns first path segment (org/owner) or null.
+  const extractOrgFromUrl = (rawUrl: string): string | null => {
+    try {
+      const u = new URL(rawUrl);
+      const segments = u.pathname.split('/').filter(Boolean);
+      if (segments.length < 2) return null;
+      return segments[0];
+    } catch {
+      return null;
+    }
+  };
+
+  // GHES flow: export phase then final migration. We use MODE from environment.
+  // Determine if GHES mode is enabled. Prefer explicit NEXT_PUBLIC_MODE, fall back to MODE.
+  const MODE = process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH';
+  // We no longer rely solely on this flag to attempt export; we optimistically try export first.
+  const isGhesMode = MODE === 'GHES';
+
+  const startGhesExportFlow = async (repo: RepositoryMigration): Promise<boolean> => {
+    try {
+      // Kick off exports only if IDs not yet present
+      const sourceOrg = extractOrgFromUrl(repo.sourceRepositoryUrl);
+      if (!sourceOrg) throw new Error('Unable to parse source organization from URL');
+      const exportResp = await client.queries.exportGhes({
+        sourceOrganization: sourceOrg,
+        repositoryName: repo.repositoryName,
+      });
+      if (exportResp.data) {
+        const lr = JSON.parse(exportResp.data as string);
+        const body = JSON.parse(lr.body);
+        if (!body.success) throw new Error(body.message || 'Failed to start GHES export');
+        const gitId = body.ghes.gitMigration.id.toString();
+        const metaId = body.ghes.metadataMigration.id.toString();
+        // Do not set state to queued yet; queued represents final GitHub migration start.
+        await client.models.RepositoryMigration.update({
+          id: repo.id,
+          ghesGitMigrationId: gitId,
+          ghesMetadataMigrationId: metaId,
+          ghesGitState: body.ghes.gitMigration.state,
+          ghesMetadataState: body.ghes.metadataMigration.state,
+          ghesExportStatus: body.ghes.exportStatus || 'EXPORTING',
+          // leave existing state (pending/reset) until final migration begins
+        });
+        pollGhesExport(repo.id, sourceOrg, gitId, metaId);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown GHES export error';
+      console.warn('GHES export attempt failed, will fallback to direct migration if appropriate:', msg);
+      // In GHES mode, record failure reason and do not fallback to direct migration which would fail backend validation.
+      if ((process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH') === 'GHES') {
+        await client.models.RepositoryMigration.update({
+          id: repo.id,
+          failureReason: msg,
+        });
+      }
+      return false;
+    }
+  };
+
+  const pollGhesExport = async (repoId: string, sourceOrg: string, gitId: string, metaId: string) => {
+    const intervalMs = 30000;
+    const poll = async () => {
+      try {
+        const resp = await client.queries.checkGhesExportStatus({
+          sourceOrganization: sourceOrg,
+          repositoryName: repositories.find(r => r.id === repoId)?.repositoryName || '',
+          gitMigrationId: gitId,
+          metadataMigrationId: metaId,
+        });
+        if (resp.data) {
+          const lr = JSON.parse(resp.data as string);
+          const body = JSON.parse(lr.body);
+          if (!body.success) throw new Error(body.message || 'GHES export polling error');
+          await client.models.RepositoryMigration.update({
+            id: repoId,
+            ghesGitState: body.ghes.git.state,
+            ghesMetadataState: body.ghes.metadata.state,
+            ghesExportStatus: body.ghes.exportStatus,
+          });
+          // Do NOT auto-start final migration; wait for user to click when EXPORTED_BOTH.
+          if (body.ghes.done) return; // stop scheduling further polling
+        }
+      } catch (e) {
+        console.error('GHES export polling error', e);
+        await client.models.RepositoryMigration.update({
+          id: repoId,
+          failureReason: e instanceof Error ? e.message : 'Unknown GHES polling error',
+        });
+      }
+      setTimeout(poll, intervalMs);
+    };
+    setTimeout(poll, intervalMs);
+  };
+
+  const handleStatusButtonClick = async (repo: RepositoryMigration) => {
+    const isGhesModeLocal = (process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH') === 'GHES';
+    if (isGhesModeLocal) {
+      // Pre-export -> start export
+      if (!repo.ghesGitMigrationId || !repo.ghesMetadataMigrationId) {
+        const started = await startGhesExportFlow(repo);
+        if (!started) console.warn('Export did not start; check failureReason.');
+        return;
+      }
+      // Exporting -> ignore clicks
+      if (repo.ghesExportStatus === 'EXPORTING' || repo.ghesExportStatus === 'EXPORTING_PARTIAL') {
+        return;
+      }
+      // Retry Export
+      if (repo.ghesExportStatus === 'FAILED_PARTIAL') {
+        // Clear failure reason and attempt export again
+        await client.models.RepositoryMigration.update({ id: repo.id, failureReason: null });
+        await startGhesExportFlow(repo);
+        return;
+      }
+      // Ready to finalize
+      if (repo.ghesExportStatus === 'EXPORTED_BOTH') {
+        startMigration(repo);
+        return;
+      }
+    }
+    // Non-GHES flow
     if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
       startMigration(repo);
     } else {
-      // Otherwise, show the info modal
       setInfoRepo(repo);
     }
   };
@@ -1182,11 +1356,12 @@ export default function App() {
   };
 
   const handleStartSelected = async () => {
-    const selectedRepoObjects = repositories.filter(r => 
-      selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset')
-    );
-    
+    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset'));
     for (const repo of selectedRepoObjects) {
+      if (!repo.ghesGitMigrationId || !repo.ghesMetadataMigrationId) {
+        const exported = await startGhesExportFlow(repo);
+        if (exported) continue; // wait for export polling
+      }
       await startMigration(repo);
     }
   };
@@ -1427,19 +1602,21 @@ export default function App() {
                   </div>
                   <div className="repository-actions">
                     <button 
-                      className={`btn btn-sm ${getStatusButtonClass(repo.state)}`}
+                      className={`btn btn-sm ${getStatusButtonClass(repo)}`}
                       onClick={() => {
                         if (canClickStatus) {
-                          // Archived repos in completed/failed state can show info modal
                           setInfoRepo(repo);
                         } else if (!isArchived) {
-                          // Non-archived repos use normal handleStatusButtonClick logic
                           handleStatusButtonClick(repo);
                         }
                       }}
-                      disabled={isArchived && !canClickStatus}
+                      disabled={
+                        (isArchived && !canClickStatus) ||
+                        ((process.env.NEXT_PUBLIC_MODE || process.env.MODE || 'GH') === 'GHES' &&
+                          (repo.ghesExportStatus === 'EXPORTING' || repo.ghesExportStatus === 'EXPORTING_PARTIAL'))
+                      }
                     >
-                      {getStatusButtonText(repo.state)}
+                      {getStatusButtonText(repo)}
                     </button>
                     <button 
                       className="btn btn-danger btn-sm"

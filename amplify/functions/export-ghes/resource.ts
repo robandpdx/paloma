@@ -1,9 +1,9 @@
 import { defineFunction } from '@aws-amplify/backend';
 
-export const scanSourceOrg = defineFunction({
-  name: 'scan-source-org',
+export const exportGhes = defineFunction({
+  name: 'export-ghes',
   entry: './handler.ts',
-  timeoutSeconds: 60, // Allow more time for scanning large organizations
+  timeoutSeconds: 120, // long enough to initiate both migrations
   environment: {
     SOURCE_ADMIN_TOKEN: process.env.SOURCE_ADMIN_TOKEN || '',
     MODE: process.env.MODE || '',
