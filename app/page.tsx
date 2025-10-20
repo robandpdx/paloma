@@ -550,39 +550,6 @@ function InfoModal({ repository, onClose, isGHESMode = false }: InfoModalProps) 
             <div className="info-label">State:</div>
             <div className="info-value">{repository.state || 'pending'}</div>
             
-            {isGHESMode && (
-              <>
-                <div className="info-label">Git Source Export State:</div>
-                <div className="info-value">{repository.gitSourceExportState || 'N/A'}</div>
-                
-                <div className="info-label">Metadata Export State:</div>
-                <div className="info-value">{repository.metadataExportState || 'N/A'}</div>
-                
-                {repository.gitSourceExportId && (
-                  <>
-                    <div className="info-label">Git Source Export ID:</div>
-                    <div className="info-value">{repository.gitSourceExportId}</div>
-                  </>
-                )}
-                
-                {repository.metadataExportId && (
-                  <>
-                    <div className="info-label">Metadata Export ID:</div>
-                    <div className="info-value">{repository.metadataExportId}</div>
-                  </>
-                )}
-                
-                {repository.exportFailureReason && (
-                  <>
-                    <div className="info-label">Export Failure Reason:</div>
-                    <div className="info-value" style={{ color: 'var(--color-danger-fg)' }}>
-                      {repository.exportFailureReason}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-            
             <div className="info-label">Destination Owner ID:</div>
             <div className="info-value">{repository.destinationOwnerId || 'N/A'}</div>
             
@@ -603,6 +570,82 @@ function InfoModal({ repository, onClose, isGHESMode = false }: InfoModalProps) 
             
             <div className="info-label">Repository Visibility:</div>
             <div className="info-value">{repository.repositoryVisibility || 'private'}</div>
+            
+            <div className="info-label">Lock source repository:</div>
+            <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-default" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ExportDetailsModalProps {
+  repository: RepositoryMigration;
+  onClose: () => void;
+}
+
+function ExportDetailsModal({ repository, onClose }: ExportDetailsModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Export Details</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="info-grid">
+            <div className="info-label">Repository Name:</div>
+            <div className="info-value">{repository.repositoryName}</div>
+            
+            <div className="info-label">Source URL:</div>
+            <div className="info-value">{repository.sourceRepositoryUrl}</div>
+            
+            <div className="info-label">Git Source Export State:</div>
+            <div className="info-value">{repository.gitSourceExportState || 'Not started'}</div>
+            
+            <div className="info-label">Metadata Export State:</div>
+            <div className="info-value">{repository.metadataExportState || 'Not started'}</div>
+            
+            {repository.gitSourceExportId && (
+              <>
+                <div className="info-label">Git Source Export ID:</div>
+                <div className="info-value">{repository.gitSourceExportId}</div>
+              </>
+            )}
+            
+            {repository.metadataExportId && (
+              <>
+                <div className="info-label">Metadata Export ID:</div>
+                <div className="info-value">{repository.metadataExportId}</div>
+              </>
+            )}
+            
+            {repository.gitSourceArchiveUrl && (
+              <>
+                <div className="info-label">Git Source Archive:</div>
+                <div className="info-value">Available</div>
+              </>
+            )}
+            
+            {repository.metadataArchiveUrl && (
+              <>
+                <div className="info-label">Metadata Archive:</div>
+                <div className="info-value">Available</div>
+              </>
+            )}
+            
+            {repository.exportFailureReason && (
+              <>
+                <div className="info-label">Export Failure Reason:</div>
+                <div className="info-value" style={{ color: 'var(--color-danger-fg)' }}>
+                  {repository.exportFailureReason}
+                </div>
+              </>
+            )}
             
             <div className="info-label">Lock source repository:</div>
             <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
@@ -806,6 +849,7 @@ export default function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showScanOrgModal, setShowScanOrgModal] = useState(false);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
+  const [exportInfoRepo, setExportInfoRepo] = useState<RepositoryMigration | null>(null);
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [resetRepo, setResetRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
@@ -1351,6 +1395,83 @@ export default function App() {
            !!repo.metadataArchiveUrl;
   };
 
+  const getExportButtonClass = (repo: RepositoryMigration) => {
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    
+    if (gitExporting || metadataExporting) {
+      return 'btn-status-in-progress';
+    }
+    
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+    
+    if (gitFailed || metadataFailed) {
+      return 'btn-status-failed';
+    }
+    
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    
+    if (gitExported && metadataExported) {
+      return 'btn-status-completed';
+    }
+    
+    return 'btn-primary';
+  };
+
+  const getExportButtonText = (repo: RepositoryMigration) => {
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    
+    if (gitExporting || metadataExporting) {
+      return 'Exporting';
+    }
+    
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+    
+    if (gitFailed || metadataFailed) {
+      return 'Export Failed';
+    }
+    
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    
+    if (gitExported && metadataExported) {
+      return 'Export Completed';
+    }
+    
+    return 'Start Export';
+  };
+
+  const handleExportButtonClick = (repo: RepositoryMigration) => {
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+    
+    // If export is in progress, failed, or completed, show details
+    if (gitExporting || metadataExporting || gitFailed || metadataFailed || (gitExported && metadataExported)) {
+      setExportInfoRepo(repo);
+    } else {
+      // Otherwise start the export
+      startExport(repo);
+    }
+  };
+
+  const handleMigrationButtonClick = (repo: RepositoryMigration) => {
+    // If migration not started, start it
+    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
+      startMigration(repo);
+    } else {
+      // Otherwise show migration details
+      setInfoRepo(repo);
+    }
+  };
+
   const handleStatusButtonClick = (repo: RepositoryMigration) => {
     const exportState = isGHESMode ? {
       git: repo.gitSourceExportState,
@@ -1780,21 +1901,42 @@ export default function App() {
                     <div className="repository-url">{repo.sourceRepositoryUrl}</div>
                   </div>
                   <div className="repository-actions">
-                    <button 
-                      className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
-                      onClick={() => {
-                        if (canClickStatus) {
-                          // Archived repos in completed/failed state can show info modal
-                          setInfoRepo(repo);
-                        } else if (!isArchived) {
-                          // Non-archived repos use normal handleStatusButtonClick logic
-                          handleStatusButtonClick(repo);
-                        }
-                      }}
-                      disabled={isArchived && !canClickStatus}
-                    >
-                      {getStatusButtonText(repo.state, exportState)}
-                    </button>
+                    {isGHESMode && !isArchived ? (
+                      <>
+                        {/* Export button for GHES mode */}
+                        <button 
+                          className={`btn btn-sm ${getExportButtonClass(repo)}`}
+                          onClick={() => handleExportButtonClick(repo)}
+                        >
+                          {getExportButtonText(repo)}
+                        </button>
+                        {/* Migration button for GHES mode */}
+                        <button 
+                          className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
+                          onClick={() => handleMigrationButtonClick(repo)}
+                          disabled={!canStartMigration(repo)}
+                        >
+                          {getStatusButtonText(repo.state, exportState)}
+                        </button>
+                      </>
+                    ) : (
+                      /* Single button for GH mode or archived repos */
+                      <button 
+                        className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
+                        onClick={() => {
+                          if (canClickStatus) {
+                            // Archived repos in completed/failed state can show info modal
+                            setInfoRepo(repo);
+                          } else if (!isArchived) {
+                            // Non-archived repos use normal handleStatusButtonClick logic
+                            handleStatusButtonClick(repo);
+                          }
+                        }}
+                        disabled={isArchived && !canClickStatus}
+                      >
+                        {getStatusButtonText(repo.state, exportState)}
+                      </button>
+                    )}
                     <button 
                       className="btn btn-danger btn-sm"
                       onClick={() => setResetRepo(repo)}
@@ -1907,6 +2049,13 @@ export default function App() {
           repository={infoRepo}
           onClose={() => setInfoRepo(null)}
           isGHESMode={isGHESMode}
+        />
+      )}
+
+      {exportInfoRepo && (
+        <ExportDetailsModal
+          repository={exportInfoRepo}
+          onClose={() => setExportInfoRepo(null)}
         />
       )}
 
