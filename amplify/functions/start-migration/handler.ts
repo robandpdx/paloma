@@ -119,8 +119,8 @@ async function createMigrationSource(
   token: string,
   mode: string = 'GH'
 ): Promise<string> {
-  // For GHES mode, use GHES_ARCHIVE type
-  const sourceType = mode === 'GHES' ? 'GHES_ARCHIVE' : 'GITHUB_ARCHIVE';
+  // Both GH and GHES use GITHUB_ARCHIVE type, but with different URLs
+  const sourceType = 'GITHUB_ARCHIVE';
   const sourceUrl = mode === 'GHES' ? (process.env.GHES_API_URL || 'https://github.com') : 'https://github.com';
   
   const mutation = `

@@ -46,7 +46,8 @@ The application now supports two distinct migration modes via the `MODE` environ
 #### Enhanced start-migration Function
 - Added support for `MODE` environment variable
 - Accepts optional `gitSourceArchiveUrl` and `metadataArchiveUrl` parameters
-- Uses `GHES_ARCHIVE` source type for GHES migrations
+- Uses `GITHUB_ARCHIVE` source type for both GH and GHES migrations (differentiated by URL)
+- For GHES mode: Sets source URL to GHES_API_URL instead of https://github.com
 - Validates that archive URLs are provided in GHES mode
 
 #### Data Schema Updates
