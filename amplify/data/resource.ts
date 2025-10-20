@@ -98,6 +98,7 @@ const schema = a.schema({
     .arguments({
       organizationName: a.string().required(),
       repositoryNames: a.string().array().required(),
+      lockSource: a.boolean(),
     })
     .returns(a.json())
     .authorization((allow) => [allow.publicApiKey()])

@@ -1086,6 +1086,7 @@ export default function App() {
       const result = await client.queries.startExport({
         organizationName,
         repositoryNames: [repo.repositoryName],
+        lockSource: repo.lockSource || false,
       });
 
       console.log('Export started:', result);

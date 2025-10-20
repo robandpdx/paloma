@@ -3,6 +3,7 @@ import type { Handler } from 'aws-lambda';
 interface ExportArguments {
   organizationName: string;
   repositoryNames: string[];
+  lockSource?: boolean;
 }
 
 interface ExportEvent {
@@ -68,7 +69,6 @@ async function startGitSourceExport(
   
   const body = {
     repositories: repositoryNames,
-    lock_repositories: false,
     exclude_metadata: false,
     exclude_git_data: false,
     exclude_attachments: true,
@@ -85,13 +85,14 @@ async function startGitSourceExport(
 async function startMetadataExport(
   organizationName: string,
   repositoryNames: string[],
-  token: string
+  token: string,
+  lockSource: boolean = false
 ): Promise<ExportResponse> {
   const endpoint = `/orgs/${organizationName}/migrations`;
   
   const body = {
     repositories: repositoryNames,
-    lock_repositories: false,
+    lock_repositories: lockSource,
     exclude_metadata: false,
     exclude_git_data: true,
     exclude_attachments: true,
@@ -141,6 +142,7 @@ export const handler: Handler = async (event: ExportEvent, context) => {
 
     console.log(`Starting exports for organization: ${args.organizationName}`);
     console.log(`Repositories: ${args.repositoryNames.join(', ')}`);
+    console.log(`Lock source: ${args.lockSource || false}`);
 
     // Start both exports in parallel
     console.log('Step 1: Starting git source export');
@@ -154,7 +156,8 @@ export const handler: Handler = async (event: ExportEvent, context) => {
     const metadataExportPromise = startMetadataExport(
       args.organizationName,
       args.repositoryNames,
-      SOURCE_ADMIN_TOKEN
+      SOURCE_ADMIN_TOKEN,
+      args.lockSource || false
     );
 
     // Wait for both exports to start
