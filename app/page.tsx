@@ -1983,9 +1983,21 @@ export default function App() {
                     <button 
                       className="btn btn-danger btn-sm"
                       onClick={() => setResetRepo(repo)}
-                      disabled={isArchived || repo.state === 'pending' || repo.state === 'reset'}
-                      title={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository')}
-                      aria-label={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'pending' || repo.state === 'reset' ? 'Reset is not available for repositories in pending or reset state' : 'Reset this repository')}
+                      disabled={
+                        isArchived || 
+                        repo.state === 'reset' || 
+                        (!isGHESMode && repo.state === 'pending') ||
+                        (isGHESMode && repo.state === 'pending' && (
+                          !repo.gitSourceExportState || 
+                          !repo.metadataExportState ||
+                          repo.gitSourceExportState === 'pending' ||
+                          repo.metadataExportState === 'pending' ||
+                          repo.gitSourceExportState === 'exporting' ||
+                          repo.metadataExportState === 'exporting'
+                        ))
+                      }
+                      title={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'reset' ? 'Reset is not available for repositories in reset state' : 'Reset this repository')}
+                      aria-label={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'reset' ? 'Reset is not available for repositories in reset state' : 'Reset this repository')}
                     >
                       Reset
                     </button>
