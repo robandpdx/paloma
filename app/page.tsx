@@ -85,7 +85,7 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
             <li>Delete the target repository if it exists</li>
             {isGHESMode && resetExport && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
             {isGHESMode && resetExport && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
-            {isGHESMode && !resetExport && <li><strong>Source repositories will remain locked</strong> (uncheck "Reset Export" to unlock)</li>}
+            {isGHESMode && !resetExport && <li><strong>Source repositories will remain locked</strong> (check "Reset Export" to unlock)</li>}
             {!isGHESMode && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
             {!isGHESMode && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
             <li>Clear migration IDs</li>
