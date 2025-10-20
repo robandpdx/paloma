@@ -1985,19 +1985,26 @@ export default function App() {
                       onClick={() => setResetRepo(repo)}
                       disabled={
                         isArchived || 
-                        repo.state === 'reset' || 
-                        (!isGHESMode && repo.state === 'pending') ||
-                        (isGHESMode && repo.state === 'pending' && (
-                          !repo.gitSourceExportState || 
-                          !repo.metadataExportState ||
-                          repo.gitSourceExportState === 'pending' ||
-                          repo.metadataExportState === 'pending' ||
-                          repo.gitSourceExportState === 'exporting' ||
-                          repo.metadataExportState === 'exporting'
+                        (!isGHESMode && (repo.state === 'reset' || repo.state === 'pending')) ||
+                        (isGHESMode && (
+                          (repo.state === 'reset' && (
+                            !repo.gitSourceExportState || 
+                            !repo.metadataExportState ||
+                            repo.gitSourceExportState !== 'exported' ||
+                            repo.metadataExportState !== 'exported'
+                          )) ||
+                          (repo.state === 'pending' && (
+                            !repo.gitSourceExportState || 
+                            !repo.metadataExportState ||
+                            repo.gitSourceExportState === 'pending' ||
+                            repo.metadataExportState === 'pending' ||
+                            repo.gitSourceExportState === 'exporting' ||
+                            repo.metadataExportState === 'exporting'
+                          ))
                         ))
                       }
-                      title={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'reset' ? 'Reset is not available for repositories in reset state' : 'Reset this repository')}
-                      aria-label={isArchived ? 'Reset is not available for archived repositories' : (repo.state === 'reset' ? 'Reset is not available for repositories in reset state' : 'Reset this repository')}
+                      title={isArchived ? 'Reset is not available for archived repositories' : 'Reset this repository'}
+                      aria-label={isArchived ? 'Reset is not available for archived repositories' : 'Reset this repository'}
                     >
                       Reset
                     </button>
