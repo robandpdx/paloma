@@ -1,7 +1,19 @@
 import type { Handler } from 'aws-lambda';
 
-// GitHub REST API endpoint
-const GITHUB_API_BASE = 'https://api.github.com';
+/**
+ * Get the GitHub API base URL based on MODE environment variable
+ */
+function getGitHubApiBase(): string {
+  const mode = process.env.MODE || 'GH';
+  if (mode === 'GHES') {
+    const ghesApiUrl = process.env.GHES_API_URL;
+    if (!ghesApiUrl) {
+      throw new Error('GHES_API_URL environment variable is required when MODE is GHES');
+    }
+    return ghesApiUrl;
+  }
+  return 'https://api.github.com';
+}
 
 interface UnlockSourceRepoArguments {
   sourceRepositoryUrl: string;
@@ -52,6 +64,7 @@ async function getMigrationId(
   repoName: string,
   token: string
 ): Promise<number> {
+  const GITHUB_API_BASE = getGitHubApiBase();
   const url = `${GITHUB_API_BASE}/orgs/${org}/migrations?per_page=100`;
   
   const response = await fetch(url, {
@@ -98,6 +111,7 @@ async function unlockRepository(
   repo: string,
   token: string
 ): Promise<void> {
+  const GITHUB_API_BASE = getGitHubApiBase();
   const url = `${GITHUB_API_BASE}/orgs/${org}/migrations/${migrationId}/repos/${repo}/lock`;
   
   const response = await fetch(url, {

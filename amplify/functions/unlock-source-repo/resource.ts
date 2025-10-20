@@ -5,5 +5,7 @@ export const unlockSourceRepo = defineFunction({
   entry: './handler.ts',
   environment: {
     SOURCE_ADMIN_TOKEN: process.env.SOURCE_ADMIN_TOKEN || '',
+    MODE: process.env.MODE || 'GH',
+    GHES_API_URL: process.env.GHES_API_URL || '',
   }
 });
