@@ -51,6 +51,7 @@ interface EnvironmentInfoModalProps {
   sourceDescription: string;
   targetDescription: string;
   targetOrganization: string;
+  mode: string;
 }
 
 function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false, isGHESMode = false, exportCompleted = false, migrationStarted = false }: ResetConfirmationModalProps) {
@@ -126,7 +127,7 @@ function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLocked
   );
 }
 
-function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, targetOrganization }: EnvironmentInfoModalProps) {
+function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, targetOrganization, mode }: EnvironmentInfoModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -144,6 +145,9 @@ function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, t
             
             <div className="info-label">Target Organization:</div>
             <div className="info-value">{targetOrganization}</div>
+            
+            <div className="info-label">Mode:</div>
+            <div className="info-value">{mode}</div>
           </div>
         </div>
       </div>
@@ -2314,6 +2318,7 @@ export default function App() {
           sourceDescription={sourceDescription}
           targetDescription={targetDescription}
           targetOrganization={targetOrganization}
+          mode={mode}
         />
       )}
     </div>
