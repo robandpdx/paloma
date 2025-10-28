@@ -1018,7 +1018,23 @@ export default function App() {
       }
 
       // Update the repository record
-      const updateFields: Record<string, string | boolean | null> = {
+      // Use an explicit typed object rather than a generic Record to satisfy the model update input
+      const updateFields: {
+        id: string;
+        state: string;
+        migrationSourceId: string | null;
+        repositoryMigrationId: string | null;
+        lockSource: boolean;
+        repositoryVisibility: string;
+        failureReason: string | null;
+        gitSourceExportId?: string | null;
+        metadataExportId?: string | null;
+        gitSourceExportState?: string | null;
+        metadataExportState?: string | null;
+        gitSourceArchiveUrl?: string | null;
+        metadataArchiveUrl?: string | null;
+        exportFailureReason?: string | null;
+      } = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
@@ -1046,12 +1062,27 @@ export default function App() {
       console.error('Error resetting repository:', error);
       // Still update the state even if the API calls failed
       const shouldUnlock = isGHESMode ? resetExport : true;
-      const updateFields: Record<string, string | boolean | null> = {
+      const updateFields: {
+        id: string;
+        state: string;
+        migrationSourceId: string | null;
+        repositoryMigrationId: string | null;
+        lockSource: boolean;
+        repositoryVisibility: string;
+        failureReason: string | null;
+        gitSourceExportId?: string | null;
+        metadataExportId?: string | null;
+        gitSourceExportState?: string | null;
+        metadataExportState?: string | null;
+        gitSourceArchiveUrl?: string | null;
+        metadataArchiveUrl?: string | null;
+        exportFailureReason?: string | null;
+      } = {
         id: repo.id,
         state: 'reset',
         migrationSourceId: null,
         repositoryMigrationId: null,
-        lockSource: shouldUnlock ? false : repo.lockSource, // Keep lockSource if not unlocking in GHES mode
+        lockSource: shouldUnlock ? false : (repo.lockSource ?? false), // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: error instanceof Error ? error.message : 'Error during reset',
       };
