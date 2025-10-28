@@ -1023,7 +1023,7 @@ export default function App() {
         state: 'reset',
         migrationSourceId: null,
         repositoryMigrationId: null,
-        lockSource: shouldUnlock ? false : repo.lockSource, // Keep lockSource if not unlocking in GHES mode
+        lockSource: shouldUnlock ? false : (repo.lockSource ?? false), // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: null,
       };
