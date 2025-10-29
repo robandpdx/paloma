@@ -1,19 +1,3 @@
-## AWS Amplify Next.js (App Router) Starter Template
-
-This repository provides a starter template for creating applications using Next.js (App Router) and AWS Amplify, emphasizing easy setup for authentication, API, and database capabilities.
-
-## Overview
-
-This template equips you with a foundational Next.js application integrated with AWS Amplify, streamlined for scalability and performance. It is ideal for developers looking to jumpstart their project with pre-configured AWS services like Cognito, AppSync, and DynamoDB.
-
-## Features
-
-- **Authentication**: Setup with Amazon Cognito for secure user authentication.
-- **API**: Ready-to-use GraphQL endpoint with AWS AppSync.
-- **Database**: Real-time database powered by Amazon DynamoDB.
-- **GitHub Migration Functions**: Lambda functions for automating repository migrations using GitHub Enterprise Importer.
-- **Migration Management UI**: GitHub-like interface for managing repository migrations with real-time status updates and a unified status button design.
-
 ## GitHub Repository Migration
 
 This application provides a complete solution for managing GitHub repository migrations using the GitHub Enterprise Importer. It includes:
@@ -21,9 +5,11 @@ This application provides a complete solution for managing GitHub repository mig
 - **Repository tracking**: Add and manage multiple repositories for migration
 - **Migration initiation**: Start repository migrations with a unified status button
 - **Status monitoring**: Real-time status updates via color-coded status buttons
-- **Target organization visibility**: Displays the target organization to ensure users know where repos are migrating
+- **Target organization visibility**: Users can select the visibility of the target repository
+- **Source repository locking**: Option to lock to source repository
 - **Migration details**: Click status buttons to view complete migration information
 - **Failure handling**: View detailed error messages when migrations fail
+- **Reset practice migrations**: Reset practice migrations by unlocking source repo and deleting target repo
 - **GHES Support**: Two-phase migration workflow for GitHub Enterprise Server (version 3.8+)
 
 ### Migration Modes
@@ -150,6 +136,10 @@ For local development, create a `.env.local` file in the root directory with the
 ```
 TARGET_ORGANIZATION=your-target-organization
 MODE=GH
+SOURCE_ADMIN_TOKEN=your-source-admin-token
+TARGET_ADMIN_TOKEN=your-target-admin-token
+SOURCE_DESCRIPTION=GitHub.com
+TARGET_DESCRIPTION=GitHub.com EMU
 # For GHES mode, also add:
 # MODE=GHES
 # GHES_API_URL=https://your-ghes-instance.com/api/v3
@@ -157,6 +147,10 @@ MODE=GH
 
 For production deployment in Amplify Console, set the following environment variables in the app settings:
 - `TARGET_ORGANIZATION` - Your target organization
+- `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com or GHES
+- `TARGET_ADMIN_TOKEN` - Personal Access Token for target GHEC
+- `SOURCE_DESCRIPTION` - Description for source (e.g., "GitHub.com")
+- `TARGET_DESCRIPTION` - Description for target (e.g., "GitHub.com EMU
 - `MODE` - Migration mode (`GH` or `GHES`)
 - `GHES_API_URL` - (GHES mode only) Your GHES API endpoint
 
