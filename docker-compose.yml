@@ -1,0 +1,50 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: paloma-mongodb
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb-data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: paloma-backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    environment:
+      PORT: '5005'
+      MONGODB_URI: mongodb://mongodb:27017/paloma
+      TARGET_ORGANIZATION: ${TARGET_ORGANIZATION:-}
+      SOURCE_ADMIN_TOKEN: ${SOURCE_ADMIN_TOKEN:-}
+      TARGET_ADMIN_TOKEN: ${TARGET_ADMIN_TOKEN:-}
+      MODE: ${MODE:-GH}
+      GHES_API_URL: ${GHES_API_URL:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    ports:
+      - '5005:5005'
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: paloma-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      PORT: '3000'
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:5005/api}
+      TARGET_ORGANIZATION: ${TARGET_ORGANIZATION:-}
+      TARGET_DESCRIPTION: ${TARGET_DESCRIPTION:-Target GitHub Enterprise Cloud}
+      SOURCE_DESCRIPTION: ${SOURCE_DESCRIPTION:-Source GitHub Organization}
+      MODE: ${MODE:-GH}
+    ports:
+      - '3000:3000'
+
+volumes:
+  mongodb-data:

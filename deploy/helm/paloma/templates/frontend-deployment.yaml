@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paloma.frontendName" . }}
+  labels:
+    {{- include "paloma.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "paloma.frontendName" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "paloma.labels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ include "paloma.frontendName" . }}
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: PORT
+              value: {{ .Values.frontend.service.port | quote }}
+            - name: NEXT_PUBLIC_API_BASE_URL
+              value: {{ .Values.frontend.env.nextPublicApiBaseUrl | quote }}
+            - name: TARGET_ORGANIZATION
+              value: {{ .Values.frontend.env.targetOrganization | quote }}
+            - name: TARGET_DESCRIPTION
+              value: {{ .Values.frontend.env.targetDescription | quote }}
+            - name: SOURCE_DESCRIPTION
+              value: {{ .Values.frontend.env.sourceDescription | quote }}
+            - name: MODE
+              value: {{ .Values.frontend.env.mode | quote }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "paloma.frontendName" . }}
+  labels:
+    {{- include "paloma.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.frontend.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "paloma.frontendName" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.frontend.service.port }}
+      targetPort: http

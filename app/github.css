@@ -469,11 +469,6 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-/* Sign out button */
-.sign-out-btn {
-  margin-left: auto;
-}
-
 /* Save confirmation */
 .save-confirmation {
   margin-top: 16px;

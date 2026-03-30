@@ -17,6 +17,7 @@ node_modules/
 
 # production
 /build
+backend/dist
 
 # misc
 .DS_Store
@@ -29,6 +30,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env.docker
 
 # vercel
 .vercel

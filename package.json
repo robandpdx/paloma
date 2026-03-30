@@ -1,11 +1,19 @@
 {
-  "name": "aws-amplify-gen2",
+  "name": "paloma-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:frontend": "next dev",
+    "dev:backend": "npm --prefix backend run start:dev",
     "build": "next build",
+    "build:frontend": "next build",
+    "build:backend": "npm --prefix backend run build",
     "start": "next start",
+    "start:frontend": "next start",
+    "start:backend": "npm --prefix backend run start",
+    "compose:up": "docker compose up --build",
+    "compose:down": "docker compose down -v",
     "lint": "next lint"
   },
   "dependencies": {

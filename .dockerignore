@@ -1,0 +1,16 @@
+node_modules
+.next
+coverage
+.git
+.github
+backend
+docs
+.amplify
+.aws-sam
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+Dockerfile*
+docker-compose.yml
+.env
+.env.*
