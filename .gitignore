@@ -39,14 +39,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# amplify
-.amplify
-amplify_outputs*
-amplifyconfiguration*
-
-# sam
-.aws-sam
-samconfig.toml
-amplify_outputs.json
-
 .env

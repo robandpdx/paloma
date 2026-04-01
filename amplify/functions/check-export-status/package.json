@@ -1,6 +1,0 @@
-{
-  "name": "check-export-status",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "handler.ts"
-}
