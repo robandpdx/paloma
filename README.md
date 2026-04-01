@@ -1,164 +1,81 @@
-## GitHub Repository Migration
+## GitHub Repository Migration UI
 
-This application provides a complete solution for managing GitHub repository migrations using the GitHub Enterprise Importer. It includes:
+This application provides a complete solution for managing GitHub repository migrations using the [GitHub Enterprise Importer](https://docs.github.com/en/migrations/using-github-enterprise-importer). It runs as two Docker containers (frontend + backend) backed by MongoDB.
 
-- **Repository tracking**: Add and manage multiple repositories for migration
-- **Migration initiation**: Start repository migrations with a unified status button
-- **Status monitoring**: Real-time status updates via color-coded status buttons
-- **Target organization visibility**: Users can select the visibility of the target repository
-- **Source repository locking**: Option to lock to source repository
-- **Migration details**: Click status buttons to view complete migration information
-- **Failure handling**: View detailed error messages when migrations fail
-- **Reset practice migrations**: Reset practice migrations by unlocking source repo and deleting target repo
-- **GHES Support**: Two-phase migration workflow for GitHub Enterprise Server (version 3.8+)
+### Features
+
+- **Repository tracking** — add and manage repositories for migration individually, via CSV, or by scanning a source organization
+- **Migration orchestration** — start, monitor, and reset migrations from the UI
+- **Status monitoring** — real-time polling with color-coded status buttons
+- **Target repository visibility** — choose private, internal, or public for each target repository
+- **Source repository locking** — optionally lock the source repository during migration
+- **Bulk operations** — start, reset, archive, or delete multiple repositories at once
+- **GHES support** — two-phase export → migration workflow for GitHub Enterprise Server (3.8+)
 
 ### Migration Modes
 
-The application supports two migration modes:
-
-#### GitHub.com Mode (Default)
-- Single-step migration process with "Start Migration" button
-- Direct migration from GitHub.com to GitHub Enterprise Cloud
-
-#### GitHub Enterprise Server (GHES) Mode
-- Two-phase migration process: Export → Migration
-- **Phase 1: Export** - Click "Start Export" to initiate parallel exports of git source and metadata from GHES
-- **Phase 2: Migration** - After exports complete, click "Start Migration" to begin the migration to GitHub Enterprise Cloud
-- Export archives are automatically uploaded to blob storage by GHES (version 3.8+)
-- No manual download/upload required
-
-To enable GHES mode, set the `MODE` environment variable to `GHES` and configure `GHES_API_URL` with your GHES instance API endpoint.
-
-### Functions
-
-1. **start-migration**: Initiates a repository migration from GitHub.com to GitHub Enterprise Cloud, or from GitHub Enterprise Server to GitHub Enterprise Cloud (when in GHES mode)
-2. **check-migration-status**: Checks the current status of an in-progress migration
-3. **start-export**: (GHES mode only) Initiates parallel exports of git source and metadata from GitHub Enterprise Server
-4. **check-export-status**: (GHES mode only) Checks the status of export operations and retrieves archive URLs
-
-### UI Features
-
-- **Repository List**: View all repositories that have been added for migration
-- **Add Repository**: Modal for adding new repositories with URL validation
-  - Option to lock source repository during migration
-- **Repository Settings**: Settings gear icon (⚙️) for each repository
-  - Toggle "Lock source repository" option before migration starts
-  - Auto-save with visual confirmation
-  - Read-only view after migration begins
-- **Status Button**: Combined status indicator and action button that:
-  - Shows "Start Migration" (green) for pending repositories - click to start migration
-  - Shows "In Progress" (blue, pulsing) during migration - click to view details
-  - Shows "Completed" (green) for successful migrations - click to view details
-  - Shows "Failed" (red) for failed migrations - click to view error details
-- **Target Organization Display**: Shows the target organization below the page title
-- **Delete Confirmation**: Type repository URL to confirm deletion
-- **Auto-polling**: Status updates every 30 seconds after migration starts
-
-## GitHub Repository Migration
-
-This application includes a Lambda function (`start-migration`) that automates GitHub repository migrations using the GitHub Enterprise Importer GraphQL API.
+| Mode | Set `MODE` to | Description |
+|------|--------------|-------------|
+| **GitHub.com** (default) | `GH` | Single-step migration from GitHub.com to GitHub Enterprise Cloud |
+| **GitHub Enterprise Server** | `GHES` | Two-phase: export from GHES, then migrate to GitHub Enterprise Cloud |
 
 ### Quick Start
 
-1. **Set up environment variables** in Amplify Console:
-   - `TARGET_ORGANIZATION` - Target GitHub organization name (displayed in the UI)
-   - `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com or GHES
-   - `TARGET_ADMIN_TOKEN` - Personal Access Token for target GHEC
-   - `MODE` - (Optional) Set to `GHES` for GitHub Enterprise Server migrations, or `GH` (default) for GitHub.com migrations
-   - `GHES_API_URL` - (Required for GHES mode) API endpoint for your GHES instance (e.g., `https://myghes.com/api/v3`)
+1. **Copy the example environment file and fill in your values:**
 
-2. **Deploy the application** (see deployment section below)
-
-3. **Use the UI** to manage migrations:
-   - The target organization is displayed below the page title
-   - Click "Add Repository" to add a new repository for migration
-   - Check "Lock source repository" option to prevent modifications during migration
-   
-   **For GitHub.com migrations (default MODE='GH'):**
-   - Click the "Start Migration" button (green) to begin the migration process
-   
-   **For GHES migrations (MODE='GHES'):**
-   - Click the "Start Export" button to begin exporting git source and metadata from GHES
-   - Monitor export progress - the button will show "Exporting" status
-   - Once exports complete, click "Start Migration" to begin the migration to GHEC
-   
-   - Click the settings gear icon (⚙️) to manage repository settings before migration
-   - Monitor status via the status button that changes color and text based on state
-   - Click status buttons (except "Start Migration" and "Start Export") to view migration/export details
-   - Use the "Reset" button to reset repositories (with optional "Reset Export" for GHES mode)
-   - Use the Delete button to remove repositories from the list
-
-4. **Or call the functions programmatically** from your frontend:
-   ```typescript
-   // Start a migration
-   const response = await client.queries.startMigration({
-     sourceRepositoryUrl: "https://github.com/source-org/repo",
-     repositoryName: "migrated-repo",
-     targetRepoVisibility: "private"
-   });
-   
-   // Check migration status
-   const status = await client.queries.checkMigrationStatus({
-     migrationId: "MIGRATION_ID_HERE"
-   });
+   ```bash
+   cp env.example .env
    ```
 
-For detailed documentation, see:
-- [Function README](amplify/functions/start-migration/README.md) - API details and integration examples
-- [Setup Guide](amplify/functions/start-migration/SETUP.md) - Environment configuration and token setup
+   Edit `.env` with your editor. The required variables are:
 
-## Deploying to AWS
+   | Variable | Description |
+   |----------|-------------|
+   | `SOURCE_ADMIN_TOKEN` | GitHub PAT for the **source** organization (needs `repo` and `admin:org` scopes) |
+   | `TARGET_ADMIN_TOKEN` | GitHub PAT for the **target** organization (needs `repo` and `admin:org` scopes) |
+   | `TARGET_ORGANIZATION` | Name of the target GitHub organization |
 
-For detailed instructions on deploying your application, refer to the [deployment section](https://docs.amplify.aws/nextjs/start/quickstart/nextjs-app-router-client-components/#deploy-a-fullstack-app-to-aws) of our documentation.
+   Optional variables with sensible defaults:
 
-First create a new secret in AWS Secrets Manager. Enter the following key/value pairs for the new secret:
-| Secret key         | Secret value                                    |
-|--------------------|-------------------------------------------------|
-| token              | PAT with access to the git repo of your project |
-| password           | Password for basic auth on deployments          |
+   | Variable | Default | Description |
+   |----------|---------|-------------|
+   | `TARGET_DESCRIPTION` | `Target GitHub Enterprise Cloud` | Label shown in the UI for the target |
+   | `SOURCE_DESCRIPTION` | `Source GitHub Organization` | Label shown in the UI for the source |
+   | `MODE` | `GH` | Migration mode (`GH` or `GHES`) |
+   | `GHES_API_URL` | *(empty)* | Required when `MODE=GHES` — e.g. `https://github.example.com/api/v3` |
 
-Deploy to AWS via SAM:
-```bash
-sam build
-sam deploy --capabilities CAPABILITY_NAMED_IAM
-```
+   See `env.example` for a complete template.
 
-## Local development
-You first need to deploy a sandbox backend environment, or download the `amplify_outputs.json` file for backend environment. [Reference](https://docs.amplify.aws/nextjs/start/quickstart/nextjs-app-router-client-components/#4-set-up-local-environment).  
+2. **Start the application:**
 
-To deploy a sandbox backend environment, run `npx ampx sandbox`.
+   ```bash
+   docker compose up
+   ```
 
-To start the app locally, run `npm run dev`
+   This builds and starts three containers:
 
-### Environment Variables
+   | Container | Port | Description |
+   |-----------|------|-------------|
+   | `paloma-frontend` | [http://localhost:3000](http://localhost:3000) | Next.js UI |
+   | `paloma-backend` | [http://localhost:5005](http://localhost:5005) | NestJS API |
+   | `paloma-mongodb` | 27017 | MongoDB for migration state |
 
-For local development, create a `.env.local` file in the root directory with the following variables:
-```
-TARGET_ORGANIZATION=your-target-organization
-MODE=GH
-SOURCE_ADMIN_TOKEN=your-source-admin-token
-TARGET_ADMIN_TOKEN=your-target-admin-token
-SOURCE_DESCRIPTION=GitHub.com
-TARGET_DESCRIPTION=GitHub.com EMU
-# For GHES mode, also add:
-# MODE=GHES
-# GHES_API_URL=https://your-ghes-instance.com/api/v3
-```
+   Add `--build` to force a rebuild after code changes: `docker compose up --build`
 
-For production deployment in Amplify Console, set the following environment variables in the app settings:
-- `TARGET_ORGANIZATION` - Your target organization
-- `SOURCE_ADMIN_TOKEN` - Personal Access Token for source GitHub.com or GHES
-- `TARGET_ADMIN_TOKEN` - Personal Access Token for target GHEC
-- `SOURCE_DESCRIPTION` - Description for source (e.g., "GitHub.com")
-- `TARGET_DESCRIPTION` - Description for target (e.g., "GitHub.com EMU
-- `MODE` - Migration mode (`GH` or `GHES`)
-- `GHES_API_URL` - (GHES mode only) Your GHES API endpoint
+3. **Open the UI** at [http://localhost:3000](http://localhost:3000) and start migrating repositories.
 
-The `next.config.js` file is configured to embed these environment variables at build time, ensuring they're available in the deployed static app.
+### Using the UI
 
-**Note**: The `TARGET_ORGANIZATION` environment variable is embedded into the JavaScript bundle during the build process. After deploying or changing this environment variable in Amplify Console, you must trigger a new build for the changes to take effect.
+- Click **Add Repository** to add a repository for migration, or upload a CSV file, or scan an entire source organization
+- **GitHub.com mode:** click **Start Migration** to begin
+- **GHES mode:** click **Start Export** first, then **Start Migration** after exports complete
+- Use the **⚙️** icon to change repository settings (visibility, lock source)
+- Use **Reset** to reset a completed or failed migration for retry
+- Use the **Archive** view to move finished repositories out of the main list
 
+### Deploying to Kubernetes
 
+See [docs/HELM_CHART.md](docs/HELM_CHART.md) for the Helm chart reference, including an example `values.yaml` for Azure AKS with Web App Routing.
 
 ## Security
 

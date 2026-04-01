@@ -1,0 +1,59 @@
+nameOverride: ''
+fullnameOverride: ''
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/robandpdx/paloma-frontend
+    pullPolicy: IfNotPresent
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    nextPublicApiBaseUrl: /api
+    targetOrganization: ''
+    targetDescription: Target GitHub Enterprise Cloud
+    sourceDescription: Source GitHub Organization
+    mode: GH
+  resources: {}
+
+backend:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/robandpdx/paloma-backend
+    pullPolicy: IfNotPresent
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 5005
+  env:
+    port: 5005
+    mongoUri: mongodb://mongodb.example.com:27017/paloma
+    targetOrganization: ''
+    mode: GH
+    ghesApiUrl: ''
+    corsOrigin: '*'
+  secrets:
+    existingSecret: ''
+    sourceAdminTokenKey: SOURCE_ADMIN_TOKEN
+    targetAdminTokenKey: TARGET_ADMIN_TOKEN
+    inline:
+      sourceAdminToken: ''
+      targetAdminToken: ''
+  resources: {}
+
+ingress:
+  enabled: false
+  className: ''
+  annotations: {}
+  hosts:
+    - host: paloma.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: backend
+  tls: []

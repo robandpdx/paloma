@@ -17,6 +17,7 @@ node_modules/
 
 # production
 /build
+backend/dist
 
 # misc
 .DS_Store
@@ -29,6 +30,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+.env.docker
 
 # vercel
 .vercel
@@ -36,15 +38,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# amplify
-.amplify
-amplify_outputs*
-amplifyconfiguration*
-
-# sam
-.aws-sam
-samconfig.toml
-amplify_outputs.json
 
 .env

@@ -1,19 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { generateClient } from "aws-amplify/data";
-import type { Schema } from "@/amplify/data/resource";
-import { useAuthenticator } from "@aws-amplify/ui-react";
-import { Amplify } from "aws-amplify";
-import outputs from "@/amplify_outputs.json";
-import "@aws-amplify/ui-react/styles.css";
+import {
+  apiClient,
+  getRuntimeConfig,
+  type RepositoryMigration,
+  type RuntimeConfig,
+} from "@/lib/api";
 import "./github.css";
-
-Amplify.configure(outputs);
-
-const client = generateClient<Schema>();
-
-type RepositoryMigration = Schema["RepositoryMigration"]["type"];
 
 interface AddRepoModalProps {
   onClose: () => void;
@@ -25,7 +19,6 @@ interface BulkSettingsModalProps {
   onSave: (lockSource: boolean, repositoryVisibility: string) => void;
   selectedCount: number;
   onArchiveSelected: () => void;
-  onDeleteSelected: () => void;
   isArchiveView: boolean;
   onShowDeleteConfirmation: () => void;
   selectedRepositories: RepositoryMigration[];
@@ -232,7 +225,7 @@ function ScanOrgModal({ onClose, onScan }: ScanOrgModalProps) {
   );
 }
 
-function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, onDeleteSelected, isArchiveView, onShowDeleteConfirmation, selectedRepositories }: BulkSettingsModalProps) {
+function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, isArchiveView, onShowDeleteConfirmation, selectedRepositories }: BulkSettingsModalProps) {
   const [lockSource, setLockSource] = useState(false);
   const [repositoryVisibility, setRepositoryVisibility] = useState("private");
 
@@ -538,10 +531,9 @@ function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }
 interface InfoModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
-  isGHESMode?: boolean;
 }
 
-function InfoModal({ repository, onClose, isGHESMode = false }: InfoModalProps) {
+function InfoModal({ repository, onClose }: InfoModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -854,7 +846,6 @@ function FailureModal({ failureReason, onClose }: FailureModalProps) {
 }
 
 export default function App() {
-  const { signOut } = useAuthenticator();
   const [repositories, setRepositories] = useState<RepositoryMigration[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showScanOrgModal, setShowScanOrgModal] = useState(false);
@@ -875,11 +866,45 @@ export default function App() {
   const [perPage, setPerPage] = useState(10);
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [showEnvironmentInfoModal, setShowEnvironmentInfoModal] = useState(false);
-  const targetOrganization = process.env.NEXT_PUBLIC_TARGET_ORGANIZATION || 'Not configured';
-  const targetDescription = process.env.NEXT_PUBLIC_TARGET_DESCRIPTION || 'Not configured';
-  const sourceDescription = process.env.NEXT_PUBLIC_SOURCE_DESCRIPTION || 'Not configured';
-  const mode = process.env.NEXT_PUBLIC_MODE || 'GH';
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
+  const targetOrganization = runtimeConfig?.targetOrganization || 'Not configured';
+  const targetDescription = runtimeConfig?.targetDescription || 'Not configured';
+  const sourceDescription = runtimeConfig?.sourceDescription || 'Not configured';
+  const mode = runtimeConfig?.mode || 'GH';
   const isGHESMode = mode === 'GHES';
+
+  const refreshRepositories = useCallback(async () => {
+    try {
+      const nextRepositories = await apiClient.listRepositoryMigrations(true);
+      setRepositories(nextRepositories);
+    } catch (error) {
+      console.error('Error loading repositories:', error);
+    }
+  }, []);
+
+  const syncRepository = useCallback((nextRepository: RepositoryMigration) => {
+    setRepositories((currentRepositories) => {
+      const repositoryIndex = currentRepositories.findIndex(
+        (repository) => repository.id === nextRepository.id,
+      );
+
+      if (repositoryIndex === -1) {
+        return [...currentRepositories, nextRepository].sort((left, right) =>
+          left.repositoryName.localeCompare(right.repositoryName),
+        );
+      }
+
+      const updatedRepositories = [...currentRepositories];
+      updatedRepositories[repositoryIndex] = nextRepository;
+      return updatedRepositories;
+    });
+  }, []);
+
+  const removeRepositoryFromState = useCallback((id: string) => {
+    setRepositories((currentRepositories) =>
+      currentRepositories.filter((repository) => repository.id !== id),
+    );
+  }, []);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -892,22 +917,32 @@ export default function App() {
   }, [pollingExports]);
 
   // Define startPolling before it's used in effects
-  const startPolling = useCallback((repoId: string, _migrationId: string) => {
+  const startPolling = useCallback((repoId: string) => {
     setPollingRepos(prev => new Set(prev).add(repoId));
   }, []);
 
   // Define startExportPolling before it's used
-  const startExportPolling = useCallback((_repoId: string, _organizationName: string) => {
-    setPollingExports(prev => new Set(prev).add(_repoId));
+  const startExportPolling = useCallback((repoId: string) => {
+    setPollingExports(prev => new Set(prev).add(repoId));
   }, []);
 
   useEffect(() => {
-    const subscription = client.models.RepositoryMigration.observeQuery().subscribe({
-      next: (data) => setRepositories([...data.items]),
+    let isMounted = true;
+
+    void getRuntimeConfig().then((nextRuntimeConfig) => {
+      if (isMounted) {
+        setRuntimeConfig(nextRuntimeConfig);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  useEffect(() => {
+    void refreshRepositories();
+  }, [refreshRepositories]);
 
   // Resume polling for repositories that are in progress or queued on page load/refresh
   useEffect(() => {
@@ -915,7 +950,7 @@ export default function App() {
       // Start polling for repositories that are in_progress or queued and have a repositoryMigrationId
       // Check ref to avoid unnecessary state updates
       if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
-        startPolling(repo.id, repo.repositoryMigrationId);
+        startPolling(repo.id);
       }
       
       // Start export polling for repositories with exports in progress
@@ -927,8 +962,7 @@ export default function App() {
           // Extract organization name from source URL
           const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
           if (match) {
-            const organizationName = match[1];
-            startExportPolling(repo.id, organizationName);
+            startExportPolling(repo.id);
           }
         }
       }
@@ -946,7 +980,7 @@ export default function App() {
   }, [repositories, settingsRepo]);
 
   const addRepository = async (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => {
-    await client.models.RepositoryMigration.create({
+    const repository = await apiClient.createRepositoryMigration({
       sourceRepositoryUrl: url,
       repositoryName: name,
       state: 'pending',
@@ -954,32 +988,38 @@ export default function App() {
       repositoryVisibility,
       archived: false,
     });
+
+    syncRepository(repository);
   };
 
   const deleteRepository = async (id: string) => {
-    await client.models.RepositoryMigration.delete({ id });
+    await apiClient.deleteRepositoryMigration(id);
+    removeRepositoryFromState(id);
   };
 
   const archiveRepository = async (repo: RepositoryMigration) => {
-    await client.models.RepositoryMigration.update({
-      id: repo.id,
+    const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
       archived: true,
     });
+
+    syncRepository(updatedRepository);
   };
 
   const unarchiveRepository = async (repo: RepositoryMigration) => {
-    await client.models.RepositoryMigration.update({
-      id: repo.id,
+    const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
       archived: false,
     });
+
+    syncRepository(updatedRepository);
   };
 
   const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: string) => {
-    await client.models.RepositoryMigration.update({
-      id: repo.id,
+    const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
       lockSource,
       repositoryVisibility,
     });
+
+    syncRepository(updatedRepository);
   };
 
   const resetRepository = async (repo: RepositoryMigration, resetExport: boolean = false) => {
@@ -987,9 +1027,7 @@ export default function App() {
       // Delete target repository if migration was started
       if (repo.repositoryName) {
         console.log('Deleting target repository:', repo.repositoryName);
-        const deleteResult = await client.queries.deleteTargetRepo({
-          repositoryName: repo.repositoryName,
-        });
+        const deleteResult = await apiClient.deleteTargetRepo(repo.repositoryName);
         console.log('Delete result:', deleteResult);
       }
 
@@ -1008,7 +1046,7 @@ export default function App() {
         
         if (hasRequiredFields) {
           console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
-          const unlockResult = await client.queries.unlockSourceRepo({
+          const unlockResult = await apiClient.unlockSourceRepo({
             sourceRepositoryUrl: repo.sourceRepositoryUrl,
             migrationSourceId: repo.migrationSourceId || '',
             repositoryName: repo.repositoryName || '',
@@ -1018,44 +1056,52 @@ export default function App() {
       }
 
       // Update the repository record
-      // Use an explicit typed object rather than a generic Record to satisfy the model update input
       const updateFields: {
-        id: string;
         state: string;
-        migrationSourceId: string | null;
-        repositoryMigrationId: string | null;
+        migrationSourceId: string;
+        repositoryMigrationId: string;
         lockSource: boolean;
         repositoryVisibility: string;
-        failureReason: string | null;
-        gitSourceExportId?: string | null;
-        metadataExportId?: string | null;
-        gitSourceExportState?: string | null;
-        metadataExportState?: string | null;
-        gitSourceArchiveUrl?: string | null;
-        metadataArchiveUrl?: string | null;
-        exportFailureReason?: string | null;
+        failureReason: string;
+        gitSourceExportId?: string;
+        metadataExportId?: string;
+        gitSourceExportState?: string;
+        metadataExportState?: string;
+        gitSourceArchiveUrl?: string;
+        metadataArchiveUrl?: string;
+        exportFailureReason?: string;
       } = {
-        id: repo.id,
         state: 'reset',
-        migrationSourceId: null,
-        repositoryMigrationId: null,
+        migrationSourceId: '',
+        repositoryMigrationId: '',
         lockSource: shouldUnlock ? false : (repo.lockSource ?? false), // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
-        failureReason: null,
+        failureReason: '',
       };
 
       // If resetExport is true, also clear export fields
       if (resetExport) {
-        updateFields.gitSourceExportId = null;
-        updateFields.metadataExportId = null;
-        updateFields.gitSourceExportState = null;
-        updateFields.metadataExportState = null;
-        updateFields.gitSourceArchiveUrl = null;
-        updateFields.metadataArchiveUrl = null;
-        updateFields.exportFailureReason = null;
+        updateFields.gitSourceExportId = '';
+        updateFields.metadataExportId = '';
+        updateFields.gitSourceExportState = '';
+        updateFields.metadataExportState = '';
+        updateFields.gitSourceArchiveUrl = '';
+        updateFields.metadataArchiveUrl = '';
+        updateFields.exportFailureReason = '';
       }
 
-      await client.models.RepositoryMigration.update(updateFields);
+      const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, updateFields);
+      syncRepository(updatedRepository);
+      setPollingRepos((currentPollingRepos) => {
+        const nextPollingRepos = new Set(currentPollingRepos);
+        nextPollingRepos.delete(repo.id);
+        return nextPollingRepos;
+      });
+      setPollingExports((currentPollingExports) => {
+        const nextPollingExports = new Set(currentPollingExports);
+        nextPollingExports.delete(repo.id);
+        return nextPollingExports;
+      });
 
       console.log('Repository reset successfully');
     } catch (error) {
@@ -1063,51 +1109,51 @@ export default function App() {
       // Still update the state even if the API calls failed
       const shouldUnlock = isGHESMode ? resetExport : true;
       const updateFields: {
-        id: string;
         state: string;
-        migrationSourceId: string | null;
-        repositoryMigrationId: string | null;
+        migrationSourceId: string;
+        repositoryMigrationId: string;
         lockSource: boolean;
         repositoryVisibility: string;
-        failureReason: string | null;
-        gitSourceExportId?: string | null;
-        metadataExportId?: string | null;
-        gitSourceExportState?: string | null;
-        metadataExportState?: string | null;
-        gitSourceArchiveUrl?: string | null;
-        metadataArchiveUrl?: string | null;
-        exportFailureReason?: string | null;
+        failureReason: string;
+        gitSourceExportId?: string;
+        metadataExportId?: string;
+        gitSourceExportState?: string;
+        metadataExportState?: string;
+        gitSourceArchiveUrl?: string;
+        metadataArchiveUrl?: string;
+        exportFailureReason?: string;
       } = {
-        id: repo.id,
         state: 'reset',
-        migrationSourceId: null,
-        repositoryMigrationId: null,
+        migrationSourceId: '',
+        repositoryMigrationId: '',
         lockSource: shouldUnlock ? false : (repo.lockSource ?? false), // Keep lockSource if not unlocking in GHES mode
         repositoryVisibility: 'private', // Reset to default
         failureReason: error instanceof Error ? error.message : 'Error during reset',
       };
 
       if (resetExport) {
-        updateFields.gitSourceExportId = null;
-        updateFields.metadataExportId = null;
-        updateFields.gitSourceExportState = null;
-        updateFields.metadataExportState = null;
-        updateFields.gitSourceArchiveUrl = null;
-        updateFields.metadataArchiveUrl = null;
-        updateFields.exportFailureReason = null;
+        updateFields.gitSourceExportId = '';
+        updateFields.metadataExportId = '';
+        updateFields.gitSourceExportState = '';
+        updateFields.metadataExportState = '';
+        updateFields.gitSourceArchiveUrl = '';
+        updateFields.metadataArchiveUrl = '';
+        updateFields.exportFailureReason = '';
       }
 
-      await client.models.RepositoryMigration.update(updateFields);
+      const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, updateFields);
+      syncRepository(updatedRepository);
     }
   };
 
   const startMigration = async (repo: RepositoryMigration) => {
     try {
       // Optimistic update: Set state to queued immediately for user feedback
-      await client.models.RepositoryMigration.update({
-        id: repo.id,
+      const queuedRepository = await apiClient.updateRepositoryMigration(repo.id, {
         state: 'queued',
+        failureReason: '',
       });
+      syncRepository(queuedRepository);
 
       // For GHES mode, pass archive URLs
       const ghesParams = isGHESMode ? {
@@ -1117,7 +1163,7 @@ export default function App() {
 
       // Call the startMigration function
       // Pass destinationOwnerId if it exists to skip the API call to fetch it
-      const result = await client.queries.startMigration({
+      const result = await apiClient.startMigration({
         sourceRepositoryUrl: repo.sourceRepositoryUrl,
         repositoryName: repo.repositoryName,
         targetRepoVisibility: repo.repositoryVisibility || 'private',
@@ -1129,39 +1175,29 @@ export default function App() {
 
       console.log('Migration started:', result);
 
-      if (result.data) {
-        // Parse the outer JSON wrapper
-        const lambdaResponse = JSON.parse(result.data as string);
-        // Parse the inner body JSON
-        const response = JSON.parse(lambdaResponse.body);
-        
-        if (response.success) {
-          // Update with complete migration details including IDs
-          await client.models.RepositoryMigration.update({
-            id: repo.id,
-            repositoryMigrationId: response.migrationId,
-            migrationSourceId: response.migrationSourceId,
-            destinationOwnerId: response.ownerId,
-            // Keep state as queued; polling will update to actual state
-          });
-
-          // Start polling for status
-          startPolling(repo.id, response.migrationId);
-        } else {
-          await client.models.RepositoryMigration.update({
-            id: repo.id,
-            state: 'failed',
-            failureReason: response.message || 'Failed to start migration',
-          });
-        }
+      if (result.success) {
+        const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
+          repositoryMigrationId: result.migrationId,
+          migrationSourceId: result.migrationSourceId,
+          destinationOwnerId: result.ownerId,
+          failureReason: '',
+        });
+        syncRepository(updatedRepository);
+        startPolling(repo.id);
+      } else {
+        const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
+          state: 'failed',
+          failureReason: result.message || 'Failed to start migration',
+        });
+        syncRepository(failedRepository);
       }
     } catch (error) {
       console.error('Error starting migration:', error);
-      await client.models.RepositoryMigration.update({
-        id: repo.id,
+      const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
         state: 'failed',
         failureReason: error instanceof Error ? error.message : 'Unknown error',
       });
+      syncRepository(failedRepository);
     }
   };
 
@@ -1175,14 +1211,13 @@ export default function App() {
       const organizationName = match[1];
 
       // Optimistic update: Set export states to pending
-      await client.models.RepositoryMigration.update({
-        id: repo.id,
-        gitSourceExportState: 'pending',
-        metadataExportState: 'pending',
-      });
+        const pendingRepository = await apiClient.updateRepositoryMigration(repo.id, {
+          gitSourceExportState: 'pending',
+          metadataExportState: 'pending',
+        });
+        syncRepository(pendingRepository);
 
-      // Call the startExport function
-      const result = await client.queries.startExport({
+        const result = await apiClient.startExport({
         organizationName,
         repositoryNames: [repo.repositoryName],
         lockSource: repo.lockSource || false,
@@ -1190,125 +1225,80 @@ export default function App() {
 
       console.log('Export started:', result);
 
-      if (result.data) {
-        // Parse the outer JSON wrapper
-        const lambdaResponse = JSON.parse(result.data as string);
-        // Parse the inner body JSON
-        const response = JSON.parse(lambdaResponse.body);
-        
-        if (response.success) {
-          // Update with export IDs and states
-          await client.models.RepositoryMigration.update({
-            id: repo.id,
-            gitSourceExportId: String(response.gitSourceExportId),
-            metadataExportId: String(response.metadataExportId),
-            gitSourceExportState: response.gitSourceExportState,
-            metadataExportState: response.metadataExportState,
+        if (result.success) {
+          const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
+            gitSourceExportId: String(result.gitSourceExportId),
+            metadataExportId: String(result.metadataExportId),
+            gitSourceExportState: result.gitSourceExportState,
+            metadataExportState: result.metadataExportState,
+            exportFailureReason: '',
           });
-
-          // Start polling for export status
-          startExportPolling(repo.id, organizationName);
+          syncRepository(updatedRepository);
+          startExportPolling(repo.id);
         } else {
-          await client.models.RepositoryMigration.update({
-            id: repo.id,
+          const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
             gitSourceExportState: 'failed',
             metadataExportState: 'failed',
-            exportFailureReason: response.message || 'Failed to start export',
+            exportFailureReason: result.message || 'Failed to start export',
           });
-        }
+          syncRepository(failedRepository);
       }
     } catch (error) {
       console.error('Error starting export:', error);
-      await client.models.RepositoryMigration.update({
-        id: repo.id,
+        const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
         gitSourceExportState: 'failed',
         metadataExportState: 'failed',
         exportFailureReason: error instanceof Error ? error.message : 'Unknown error',
       });
+        syncRepository(failedRepository);
     }
   };
 
   const checkMigrationStatus = useCallback(async (repoId: string, migrationId: string) => {
     try {
-      const result = await client.queries.checkMigrationStatus({
-        migrationId,
-      });
+        const response = await apiClient.checkMigrationStatus(migrationId);
 
-      if (result.data) {
-        // Parse the outer JSON wrapper
-        const lambdaResponse = JSON.parse(result.data as string);
-        // Parse the inner body JSON
-        const response = JSON.parse(lambdaResponse.body);
-        
         if (response.success) {
           const state = response.state.toLowerCase();
-          
-          // Update repository with current state
-          await client.models.RepositoryMigration.update({
-            id: repoId,
-            state,
-            failureReason: response.failureReason || undefined,
+          const normalizedState = state === 'succeeded' ? 'completed' : state;
+          const updatedRepository = await apiClient.updateRepositoryMigration(repoId, {
+            state: normalizedState,
+            failureReason: response.failureReason || '',
           });
+          syncRepository(updatedRepository);
 
-          // Stop polling if migration is complete or failed
           if (state === 'failed' || state === 'succeeded' || state === 'completed') {
             setPollingRepos(prev => {
               const newSet = new Set(prev);
               newSet.delete(repoId);
               return newSet;
             });
-            
-            // If succeeded, update state to completed
-            if (state === 'succeeded') {
-              await client.models.RepositoryMigration.update({
-                id: repoId,
-                state: 'completed',
-              });
-            }
           }
-        }
       }
     } catch (error) {
       console.error('Error checking migration status:', error);
     }
-  }, []);
+  }, [syncRepository]);
 
   const checkExportStatus = useCallback(async (repoId: string, organizationName: string, gitSourceExportId: string, metadataExportId: string) => {
     try {
-      // Check git source export status
-      const gitSourceResult = await client.queries.checkExportStatus({
-        organizationName,
-        exportId: gitSourceExportId,
-      });
+        const [gitSourceResponse, metadataResponse] = await Promise.all([
+          apiClient.checkExportStatus(organizationName, gitSourceExportId),
+          apiClient.checkExportStatus(organizationName, metadataExportId),
+        ]);
 
-      // Check metadata export status
-      const metadataResult = await client.queries.checkExportStatus({
-        organizationName,
-        exportId: metadataExportId,
-      });
-
-      if (gitSourceResult.data && metadataResult.data) {
-        // Parse responses
-        const gitSourceLambdaResponse = JSON.parse(gitSourceResult.data as string);
-        const gitSourceResponse = JSON.parse(gitSourceLambdaResponse.body);
-        
-        const metadataLambdaResponse = JSON.parse(metadataResult.data as string);
-        const metadataResponse = JSON.parse(metadataLambdaResponse.body);
-        
         if (gitSourceResponse.success && metadataResponse.success) {
-          // Update repository with current export states
-          await client.models.RepositoryMigration.update({
-            id: repoId,
+          const updatedRepository = await apiClient.updateRepositoryMigration(repoId, {
             gitSourceExportState: gitSourceResponse.state,
             metadataExportState: metadataResponse.state,
-            gitSourceArchiveUrl: gitSourceResponse.archiveUrl || undefined,
-            metadataArchiveUrl: metadataResponse.archiveUrl || undefined,
+            gitSourceArchiveUrl: gitSourceResponse.archiveUrl || '',
+            metadataArchiveUrl: metadataResponse.archiveUrl || '',
           });
+          syncRepository(updatedRepository);
 
-          // Stop polling if both exports are complete or failed
           const gitSourceComplete = gitSourceResponse.state === 'exported' || gitSourceResponse.state === 'failed';
           const metadataComplete = metadataResponse.state === 'exported' || metadataResponse.state === 'failed';
-          
+
           if (gitSourceComplete && metadataComplete) {
             setPollingExports(prev => {
               const newSet = new Set(prev);
@@ -1316,12 +1306,11 @@ export default function App() {
               return newSet;
             });
           }
-        }
       }
     } catch (error) {
       console.error('Error checking export status:', error);
     }
-  }, []);
+  }, [syncRepository]);
 
   // Polling effect
   useEffect(() => {
@@ -1642,8 +1631,8 @@ export default function App() {
           if (repoName) {
             const lockSource = lockSourceStr?.toLowerCase() === 'true';
             const visibility = repoVisibility || 'private';
-            
-            await client.models.RepositoryMigration.create({
+
+            const repository = await apiClient.createRepositoryMigration({
               sourceRepositoryUrl: sourceRepoUrl,
               repositoryName: repoName,
               state: 'pending',
@@ -1651,6 +1640,7 @@ export default function App() {
               repositoryVisibility: visibility,
               archived: false,
             });
+            syncRepository(repository);
           }
         }
       }
@@ -1663,55 +1653,42 @@ export default function App() {
   const handleScanOrg = async (orgName: string, repositoryVisibility: string, lockSource: boolean) => {
     try {
       console.log(`Scanning organization: ${orgName}`);
-      
-      // Call the scanSourceOrg function
-      const result = await client.queries.scanSourceOrg({
-        organizationName: orgName,
-      });
+
+      const result = await apiClient.scanSourceOrg(orgName);
 
       console.log('Scan result:', result);
 
-      if (result.data) {
-        // Parse the outer JSON wrapper
-        const lambdaResponse = JSON.parse(result.data as string);
-        // Parse the inner body JSON
-        const response = JSON.parse(lambdaResponse.body);
-        
-        if (response.success && response.repositories) {
-          console.log(`Found ${response.repositories.length} repositories`);
-          
-          // Add repositories to the database
-          let addedCount = 0;
-          let skippedCount = 0;
-          
-          for (const repo of response.repositories) {
-            // Check if repository already exists in the database
-            const existingRepo = repositories.find(r => r.sourceRepositoryUrl === repo.html_url);
-            if (existingRepo) {
-              console.log(`Skipping ${repo.name} - already exists in database`);
-              skippedCount++;
-              continue;
-            }
-            
-            // Add repository to database
-            await client.models.RepositoryMigration.create({
-              sourceRepositoryUrl: repo.html_url,
-              repositoryName: repo.name,
-              state: 'pending',
-              lockSource,
-              repositoryVisibility,
-              archived: false,
-            });
-            
-            addedCount++;
+      if (result.success && result.repositories) {
+        console.log(`Found ${result.repositories.length} repositories`);
+
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        for (const repo of result.repositories) {
+          const existingRepo = repositories.find(r => r.sourceRepositoryUrl === repo.html_url);
+          if (existingRepo) {
+            console.log(`Skipping ${repo.name} - already exists in database`);
+            skippedCount++;
+            continue;
           }
-          
-          console.log(`Added ${addedCount} repositories, skipped ${skippedCount} existing repositories`);
-          alert(`Successfully scanned ${orgName}!\nAdded: ${addedCount} repositories\nSkipped: ${skippedCount} existing repositories`);
-        } else {
-          console.error('Scan failed:', response);
-          alert(`Failed to scan organization: ${response.message || 'Unknown error'}`);
+
+          const createdRepository = await apiClient.createRepositoryMigration({
+            sourceRepositoryUrl: repo.html_url,
+            repositoryName: repo.name,
+            state: 'pending',
+            lockSource,
+            repositoryVisibility,
+            archived: false,
+          });
+          syncRepository(createdRepository);
+          addedCount++;
         }
+
+        console.log(`Added ${addedCount} repositories, skipped ${skippedCount} existing repositories`);
+        alert(`Successfully scanned ${orgName}!\nAdded: ${addedCount} repositories\nSkipped: ${skippedCount} existing repositories`);
+      } else {
+        console.error('Scan failed:', result);
+        alert('Failed to scan organization');
       }
       
       setShowScanOrgModal(false);
@@ -1910,15 +1887,26 @@ export default function App() {
     setCurrentPage(1); // Reset to first page when changing per page
   };
 
+  if (!runtimeConfig) {
+    return (
+      <div className="app-container">
+        <div className="repository-list">
+          <div className="empty-state">
+            <div className="empty-state-icon">⚙️</div>
+            <h3 className="empty-state-title">Loading configuration</h3>
+            <p className="empty-state-description">Reading runtime configuration from the running container.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       <header className="app-header">
         <div>
           <h1 className="app-title">GitHub Repository Migration</h1>
         </div>
-        <button className="btn btn-default sign-out-btn" onClick={signOut}>
-          Sign out
-        </button>
       </header>
 
       <div className="repository-list">
@@ -2010,8 +1998,8 @@ export default function App() {
             <div className="empty-state-icon">📦</div>
             <h3 className="empty-state-title">{showArchiveView ? 'No archived repositories' : 'No repositories yet'}</h3>
             <p className="empty-state-description">
-              {showArchiveView 
-                ? 'You have no archived repositories' 
+              {showArchiveView
+                ? 'You have no archived repositories'
                 : 'Get started by adding a repository to migrate or load a CSV file'}
             </p>
             {!showArchiveView && (
@@ -2041,7 +2029,7 @@ export default function App() {
                 git: repo.gitSourceExportState,
                 metadata: repo.metadataExportState,
               } : undefined;
-              
+
               return (
                 <div key={repo.id} className="repository-item">
                   <div className="repository-checkbox-cell">
@@ -2059,15 +2047,13 @@ export default function App() {
                   <div className="repository-actions">
                     {isGHESMode && !isArchived ? (
                       <>
-                        {/* Export button for GHES mode */}
-                        <button 
+                        <button
                           className={`btn btn-sm ${getExportButtonClass(repo)}`}
                           onClick={() => handleExportButtonClick(repo)}
                         >
                           {getExportButtonText(repo)}
                         </button>
-                        {/* Migration button for GHES mode */}
-                        <button 
+                        <button
                           className={`btn btn-sm ${getMigrationButtonClass(repo.state)}`}
                           onClick={() => handleMigrationButtonClick(repo)}
                           disabled={!canStartMigration(repo)}
@@ -2076,15 +2062,12 @@ export default function App() {
                         </button>
                       </>
                     ) : (
-                      /* Single button for GH mode or archived repos */
-                      <button 
+                      <button
                         className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
                         onClick={() => {
                           if (canClickStatus) {
-                            // Archived repos in completed/failed state can show info modal
                             setInfoRepo(repo);
                           } else if (!isArchived) {
-                            // Non-archived repos use normal handleStatusButtonClick logic
                             handleStatusButtonClick(repo);
                           }
                         }}
@@ -2093,21 +2076,21 @@ export default function App() {
                         {getStatusButtonText(repo.state, exportState)}
                       </button>
                     )}
-                    <button 
+                    <button
                       className="btn btn-danger btn-sm"
                       onClick={() => setResetRepo(repo)}
                       disabled={
-                        isArchived || 
+                        isArchived ||
                         (!isGHESMode && (repo.state === 'reset' || repo.state === 'pending')) ||
                         (isGHESMode && (
                           (repo.state === 'reset' && (
-                            !repo.gitSourceExportState || 
+                            !repo.gitSourceExportState ||
                             !repo.metadataExportState ||
                             repo.gitSourceExportState !== 'exported' ||
                             repo.metadataExportState !== 'exported'
                           )) ||
                           (repo.state === 'pending' && (
-                            !repo.gitSourceExportState || 
+                            !repo.gitSourceExportState ||
                             !repo.metadataExportState ||
                             repo.gitSourceExportState === 'pending' ||
                             repo.metadataExportState === 'pending' ||
@@ -2121,7 +2104,7 @@ export default function App() {
                     >
                       Reset
                     </button>
-                    <button 
+                    <button
                       className="btn btn-default btn-sm btn-icon"
                       onClick={() => setSettingsRepo(repo)}
                       title="Repository settings"
@@ -2223,7 +2206,6 @@ export default function App() {
         <InfoModal
           repository={infoRepo}
           onClose={() => setInfoRepo(null)}
-          isGHESMode={isGHESMode}
         />
       )}
 
@@ -2258,7 +2240,6 @@ export default function App() {
           onSave={handleBulkSettingsUpdate}
           selectedCount={selectedRepos.size}
           onArchiveSelected={handleArchiveSelected}
-          onDeleteSelected={handleDeleteSelected}
           isArchiveView={showArchiveView}
           onShowDeleteConfirmation={() => setShowDeleteSelectedConfirmation(true)}
           selectedRepositories={repositories.filter(r => selectedRepos.has(r.id))}

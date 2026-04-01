@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import "./github.css";
-import AuthenticatorWrapper from "./AuthenticatorWrapper";
-import "@aws-amplify/ui-react/styles.css";
 
 export const metadata: Metadata = {
   title: "GitHub Repository Migration",
@@ -15,11 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <AuthenticatorWrapper>
-          {children}
-        </AuthenticatorWrapper>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
