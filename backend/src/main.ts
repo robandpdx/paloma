@@ -19,7 +19,6 @@ async function bootstrap() {
   const corsOrigin = environment.corsOrigin;
   app.enableCors({
     origin: corsOrigin.length > 0 ? corsOrigin : true,
-    credentials: true,
   });
 
   await app.listen(environment.port);
