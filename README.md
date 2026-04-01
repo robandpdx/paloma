@@ -1,4 +1,4 @@
-## GitHub Repository Migration
+## GitHub Repository Migration UI
 
 This application provides a complete solution for managing GitHub repository migrations using the [GitHub Enterprise Importer](https://docs.github.com/en/migrations/using-github-enterprise-importer). It runs as two Docker containers (frontend + backend) backed by MongoDB.
 
