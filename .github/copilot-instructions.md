@@ -2,10 +2,6 @@ Migrating repositories from GitHub.com to GitHub Enterprise Cloud
 
 You can migrate repositories from GitHub.com to GitHub Enterprise Cloud, using the GitHub CLI or the GraphQL API.
 
-## GitHub Mobile and gists
-
-No. Gists are not currently available in the GitHub mobile app. To work with gists on mobile, use GitHub in a mobile web browser.
-
 ## Tool navigation
 
 - [API](https://docs.github.com/en/migrations/using-github-enterprise-importer/migrating-between-github-products/migrating-repositories-from-githubcom-to-github-enterprise-cloud?tool=api)
@@ -231,3 +227,9 @@ To finish your migration, we recommend that you check the "Migration Log" issue.
 ![Screenshot of an issue with the title "Migration Log." The second comment in the issue includes logs for a migration.](https://docs.github.com/assets/cb-181113/images/help/github-enterprise-importer/migration-log-issue.png)
 
 Finally, we recommend that you review your migrated repositories for a soundness check.
+
+## Additional FAQ
+
+### Are gists available in the GitHub mobile app?
+
+Gists are not currently available in the GitHub mobile app. To work with gists on mobile, use GitHub in a mobile web browser.
