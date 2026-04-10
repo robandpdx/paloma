@@ -19,7 +19,7 @@
     "test:backend": "npm --prefix backend test"
   },
   "dependencies": {
-    "next": "15.5.14",
+    "next": "15.5.15",
     "react": "^18",
     "react-dom": "^18"
   },
