@@ -6,6 +6,12 @@ import {
   IsString,
   IsUrl,
 } from 'class-validator';
+import {
+  MIGRATION_STATES,
+  type MigrationState,
+  REPO_VISIBILITIES,
+  type RepoVisibility,
+} from '../../common/constants/migration-states';
 
 export class CreateRepositoryMigrationDto {
   @IsString()
@@ -27,8 +33,8 @@ export class CreateRepositoryMigrationDto {
   repositoryMigrationId?: string;
 
   @IsOptional()
-  @IsString()
-  state?: string;
+  @IsIn([...MIGRATION_STATES])
+  state?: MigrationState;
 
   @IsOptional()
   @IsString()
@@ -40,8 +46,8 @@ export class CreateRepositoryMigrationDto {
   lockSource?: boolean;
 
   @IsOptional()
-  @IsIn(['private', 'public', 'internal'])
-  repositoryVisibility?: 'private' | 'public' | 'internal';
+  @IsIn([...REPO_VISIBILITIES])
+  repositoryVisibility?: RepoVisibility;
 
   @IsOptional()
   @Type(() => Boolean)

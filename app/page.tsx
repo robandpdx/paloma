@@ -1,852 +1,63 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
+import type { RepositoryMigration, RepoVisibility } from "@/lib/api";
+import { useRepositoryMigrations } from "@/hooks/useRepositoryMigrations";
 import {
-  apiClient,
-  getRuntimeConfig,
-  type RepositoryMigration,
-  type RuntimeConfig,
-} from "@/lib/api";
+  getMigrationButtonClass,
+  getMigrationButtonText,
+  getStatusButtonClass,
+  getStatusButtonText,
+  canStartMigration,
+  getExportButtonClass,
+  getExportButtonText,
+  canResetRepository,
+} from "@/lib/migrationStatus";
+import AddRepoModal from "@/components/modals/AddRepoModal";
+import BulkSettingsModal from "@/components/modals/BulkSettingsModal";
+import DeleteSelectedConfirmationModal from "@/components/modals/DeleteSelectedConfirmationModal";
+import EnvironmentInfoModal from "@/components/modals/EnvironmentInfoModal";
+import ExportDetailsModal from "@/components/modals/ExportDetailsModal";
+import FailureModal from "@/components/modals/FailureModal";
+import InfoModal from "@/components/modals/InfoModal";
+import ResetConfirmationModal from "@/components/modals/ResetConfirmationModal";
+import ScanOrgModal from "@/components/modals/ScanOrgModal";
+import SettingsModal from "@/components/modals/SettingsModal";
+import ErrorToast from "@/components/ErrorToast";
 import "./github.css";
 
-interface AddRepoModalProps {
-  onClose: () => void;
-  onAdd: (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => void;
-}
-
-interface BulkSettingsModalProps {
-  onClose: () => void;
-  onSave: (lockSource: boolean, repositoryVisibility: string) => void;
-  selectedCount: number;
-  onArchiveSelected: () => void;
-  isArchiveView: boolean;
-  onShowDeleteConfirmation: () => void;
-  selectedRepositories: RepositoryMigration[];
-}
-
-interface ResetConfirmationModalProps {
-  onClose: () => void;
-  onConfirm: (resetExport: boolean) => Promise<void>;
-  repositoryCount: number;
-  hasLockedRepos?: boolean;
-  isGHESMode?: boolean;
-  exportCompleted?: boolean; // Whether exports are completed (for GHES mode)
-  migrationStarted?: boolean; // Whether migration has started (for GHES mode)
-}
-
-interface ScanOrgModalProps {
-  onClose: () => void;
-  onScan: (orgName: string, repositoryVisibility: string, lockSource: boolean) => void;
-}
-
-interface EnvironmentInfoModalProps {
-  onClose: () => void;
-  sourceDescription: string;
-  targetDescription: string;
-  targetOrganization: string;
-  mode: string;
-}
-
-function ResetConfirmationModal({ onClose, onConfirm, repositoryCount, hasLockedRepos = false, isGHESMode = false, exportCompleted = false, migrationStarted = false }: ResetConfirmationModalProps) {
-  const [isResetting, setIsResetting] = useState(false);
-  // In GHES mode: default to checked if export completed but migration not started, otherwise unchecked
-  const [resetExport, setResetExport] = useState(isGHESMode && exportCompleted && !migrationStarted);
-
-  const handleReset = async () => {
-    setIsResetting(true);
-    await onConfirm(resetExport);
-    setIsResetting(false);
-    onClose();
-  };
-
-  const handleClose = () => {
-    if (!isResetting) {
-      onClose();
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Confirm Reset</h2>
-          <button className="modal-close" onClick={handleClose} disabled={isResetting}>×</button>
-        </div>
-        <div className="modal-body">
-          <p>Are you sure you want to reset {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
-          <p className="form-help">This will:</p>
-          <ul style={{ marginLeft: '20px', marginTop: '8px' }}>
-            <li>Delete the target repository if it exists</li>
-            {isGHESMode && resetExport && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
-            {isGHESMode && resetExport && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
-            {isGHESMode && !resetExport && <li><strong>Source repositories will remain locked</strong> (check &quot;Reset Export&quot; to unlock)</li>}
-            {!isGHESMode && hasLockedRepos && <li>Unlock the source repository if it was locked</li>}
-            {!isGHESMode && !hasLockedRepos && repositoryCount > 1 && <li>Unlock source repositories that were locked</li>}
-            <li>Clear migration IDs</li>
-            <li>Reset the migration state</li>
-            <li>Set repository visibility to private</li>
-            <li>Clear lock source repository setting</li>
-          </ul>
-          {isGHESMode && (
-            <div className="form-group" style={{ marginTop: '16px' }}>
-              <label className="form-checkbox-wrapper">
-                <input
-                  type="checkbox"
-                  className="form-checkbox"
-                  checked={resetExport}
-                  onChange={(e) => setResetExport(e.target.checked)}
-                  disabled={isResetting}
-                />
-                <span className="form-checkbox-label">Reset Export</span>
-              </label>
-              <div className="form-help">
-                If checked, this will also clear the export data and unlock source repositories, requiring a new export before the next migration can be started. If unchecked, export data will be preserved and source repositories will remain locked.
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={handleClose} disabled={isResetting}>Cancel</button>
-          <button 
-            className="btn btn-danger" 
-            onClick={handleReset}
-            disabled={isResetting}
-          >
-            {isResetting ? 'Resetting...' : `Reset ${repositoryCount > 1 ? 'Selected' : ''}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, targetOrganization, mode }: EnvironmentInfoModalProps) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Environment Information</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="info-grid">
-            <div className="info-label">Source Description:</div>
-            <div className="info-value">{sourceDescription}</div>
-            
-            <div className="info-label">Target Description:</div>
-            <div className="info-value">{targetDescription}</div>
-            
-            <div className="info-label">Target Organization:</div>
-            <div className="info-value">{targetOrganization}</div>
-            
-            <div className="info-label">Mode:</div>
-            <div className="info-value">{mode}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ScanOrgModal({ onClose, onScan }: ScanOrgModalProps) {
-  const [orgName, setOrgName] = useState("");
-  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
-  const [lockSource, setLockSource] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-
-  const handleScan = async () => {
-    if (orgName) {
-      setIsScanning(true);
-      await onScan(orgName, repositoryVisibility, lockSource);
-      setIsScanning(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Scan Source Organization</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Organization Name</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="organization-name"
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              disabled={isScanning}
-            />
-            <div className="form-help">Enter the name of the GitHub organization to scan</div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Repository Visibility</label>
-            <select
-              className="form-input"
-              value={repositoryVisibility}
-              onChange={(e) => setRepositoryVisibility(e.target.value)}
-              disabled={isScanning}
-            >
-              <option value="private">Private</option>
-              <option value="public">Public</option>
-              <option value="internal">Internal</option>
-            </select>
-            <div className="form-help">Select the visibility for all scanned repositories</div>
-          </div>
-          <div className="form-group">
-            <label className="form-checkbox-wrapper">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={lockSource}
-                onChange={(e) => setLockSource(e.target.checked)}
-                disabled={isScanning}
-              />
-              <span className="form-checkbox-label">Lock source repository</span>
-            </label>
-            <div className="form-help">Lock the source repositories during migration to prevent modifications</div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose} disabled={isScanning}>Cancel</button>
-          <button 
-            className="btn btn-primary" 
-            onClick={handleScan}
-            disabled={!orgName || isScanning}
-          >
-            {isScanning ? 'Scanning...' : 'Scan'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, isArchiveView, onShowDeleteConfirmation, selectedRepositories }: BulkSettingsModalProps) {
-  const [lockSource, setLockSource] = useState(false);
-  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
-
-  // Check if any selected repositories are in a non-editable state
-  const hasNonEditableRepos = selectedRepositories.some(
-    repo => repo.state !== 'pending' && repo.state !== 'reset'
-  );
-  const isSettingsEditable = !hasNonEditableRepos;
-
-  const handleSave = () => {
-    onSave(lockSource, repositoryVisibility);
-    onClose();
-  };
-
-  const handleArchiveSelected = () => {
-    onArchiveSelected();
-    onClose();
-  };
-
-  const handleDeleteSelected = () => {
-    onClose();
-    onShowDeleteConfirmation();
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Bulk Update Settings</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <p className="form-help" style={{ marginBottom: '16px' }}>
-            Update settings for {selectedCount} selected {selectedCount === 1 ? 'repository' : 'repositories'}
-          </p>
-          <div className="form-group">
-            <label className="form-label">Repository Visibility</label>
-            <select
-              className="form-input"
-              value={repositoryVisibility}
-              onChange={(e) => setRepositoryVisibility(e.target.value)}
-              disabled={!isSettingsEditable}
-            >
-              <option value="private">Private</option>
-              <option value="public">Public</option>
-              <option value="internal">Internal</option>
-            </select>
-            <div className="form-help">
-              {!isSettingsEditable 
-                ? 'This setting cannot be changed after migration has started or been completed'
-                : 'Select the visibility for the target repositories'}
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-checkbox-wrapper">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={lockSource}
-                onChange={(e) => setLockSource(e.target.checked)}
-                disabled={!isSettingsEditable}
-              />
-              <span className="form-checkbox-label">Lock source repository</span>
-            </label>
-            <div className="form-help">
-              {!isSettingsEditable 
-                ? 'This setting cannot be changed after migration has started'
-                : 'Lock the source repositories during migration to prevent modifications'}
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {!isArchiveView && (
-              <button 
-                className="btn btn-warning" 
-                onClick={handleArchiveSelected}
-              >
-                Archive Selected
-              </button>
-            )}
-            <button 
-              className="btn btn-danger" 
-              onClick={handleDeleteSelected}
-            >
-              Delete Selected
-            </button>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn btn-default" onClick={onClose}>Cancel</button>
-            <button 
-              className="btn btn-primary" 
-              onClick={handleSave}
-              disabled={!isSettingsEditable}
-            >
-              Save Settings
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AddRepoModal({ onClose, onAdd }: AddRepoModalProps) {
-  const [url, setUrl] = useState("");
-  const [name, setName] = useState("");
-  const [lockSource, setLockSource] = useState(false);
-  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
-
-  const handleAdd = () => {
-    if (url && name) {
-      onAdd(url, name, lockSource, repositoryVisibility);
-      onClose();
-    }
-  };
-
-  const extractRepoName = (repoUrl: string) => {
-    // Extract repo name from URL like https://github.com/owner/repo
-    const match = repoUrl.match(/github\.com\/[^\/]+\/([^\/]+)/);
-    if (match) {
-      return match[1].replace(/\.git$/, '');
-    }
-    return '';
-  };
-
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newUrl = e.target.value;
-    setUrl(newUrl);
-    // Auto-populate name if empty
-    if (!name && newUrl) {
-      const extractedName = extractRepoName(newUrl);
-      if (extractedName) {
-        setName(extractedName);
-      }
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Add New Repository</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Source Repository URL</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="https://github.com/owner/repository"
-              value={url}
-              onChange={handleUrlChange}
-            />
-            <div className="form-help">Enter the full URL of the GitHub repository you want to migrate</div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Repository Name</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="repository-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <div className="form-help">Enter the name for the migrated repository</div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Repository Visibility</label>
-            <select
-              className="form-input"
-              value={repositoryVisibility}
-              onChange={(e) => setRepositoryVisibility(e.target.value)}
-            >
-              <option value="private">Private</option>
-              <option value="public">Public</option>
-              <option value="internal">Internal</option>
-            </select>
-            <div className="form-help">Select the visibility for the migrated repository</div>
-          </div>
-          <div className="form-group">
-            <label className="form-checkbox-wrapper">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={lockSource}
-                onChange={(e) => setLockSource(e.target.checked)}
-              />
-              <span className="form-checkbox-label">Lock source repository</span>
-            </label>
-            <div className="form-help">Lock the source repository during migration to prevent modifications</div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Cancel</button>
-          <button 
-            className="btn btn-primary" 
-            onClick={handleAdd}
-            disabled={!url || !name}
-          >
-            Add Repository
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface DeleteModalProps {
-  repository: RepositoryMigration;
-  onClose: () => void;
-  onDelete: () => void;
-}
-
-function DeleteModal({ repository, onClose, onDelete }: DeleteModalProps) {
-  const [confirmText, setConfirmText] = useState("");
-  const isConfirmed = confirmText === repository.sourceRepositoryUrl;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Delete Repository</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <p>Are you sure you want to delete <strong>{repository.repositoryName}</strong>?</p>
-          <p className="form-help">Type the repository URL to confirm deletion:</p>
-          <div className="form-group">
-            <input
-              type="text"
-              className="form-input"
-              placeholder={repository.sourceRepositoryUrl}
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Cancel</button>
-          <button 
-            className="btn btn-danger" 
-            onClick={onDelete}
-            disabled={!isConfirmed}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface DeleteSelectedConfirmationModalProps {
-  onClose: () => void;
-  onConfirm: () => void;
-  repositoryCount: number;
-}
-
-function DeleteSelectedConfirmationModal({ onClose, onConfirm, repositoryCount }: DeleteSelectedConfirmationModalProps) {
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    await onConfirm();
-    setIsDeleting(false);
-    onClose();
-  };
-
-  const handleClose = () => {
-    if (!isDeleting) {
-      onClose();
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={handleClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Confirm Delete</h2>
-          <button className="modal-close" onClick={handleClose} disabled={isDeleting}>×</button>
-        </div>
-        <div className="modal-body">
-          <p>Are you sure you want to delete {repositoryCount === 1 ? 'this repository' : `${repositoryCount} repositories`}?</p>
-          <p className="form-help">This action cannot be undone.</p>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={handleClose} disabled={isDeleting}>Cancel</button>
-          <button 
-            className="btn btn-danger" 
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            {isDeleting ? 'Deleting...' : `Delete ${repositoryCount > 1 ? 'Selected' : ''}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface InfoModalProps {
-  repository: RepositoryMigration;
-  onClose: () => void;
-}
-
-function InfoModal({ repository, onClose }: InfoModalProps) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Repository Migration Details</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="info-grid">
-            <div className="info-label">Repository Name:</div>
-            <div className="info-value">{repository.repositoryName}</div>
-            
-            <div className="info-label">Source URL:</div>
-            <div className="info-value">{repository.sourceRepositoryUrl}</div>
-            
-            <div className="info-label">State:</div>
-            <div className="info-value">{repository.state || 'pending'}</div>
-            
-            <div className="info-label">Destination Owner ID:</div>
-            <div className="info-value">{repository.destinationOwnerId || 'N/A'}</div>
-            
-            <div className="info-label">Migration Source ID:</div>
-            <div className="info-value">{repository.migrationSourceId || 'N/A'}</div>
-            
-            <div className="info-label">Repository Migration ID:</div>
-            <div className="info-value">{repository.repositoryMigrationId || 'N/A'}</div>
-            
-            {repository.failureReason && (
-              <>
-                <div className="info-label">Failure Reason:</div>
-                <div className="info-value" style={{ color: 'var(--color-danger-fg)' }}>
-                  {repository.failureReason}
-                </div>
-              </>
-            )}
-            
-            <div className="info-label">Repository Visibility:</div>
-            <div className="info-value">{repository.repositoryVisibility || 'private'}</div>
-            
-            <div className="info-label">Lock source repository:</div>
-            <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface ExportDetailsModalProps {
-  repository: RepositoryMigration;
-  onClose: () => void;
-}
-
-function ExportDetailsModal({ repository, onClose }: ExportDetailsModalProps) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Export Details</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="info-grid">
-            <div className="info-label">Repository Name:</div>
-            <div className="info-value">{repository.repositoryName}</div>
-            
-            <div className="info-label">Source URL:</div>
-            <div className="info-value">{repository.sourceRepositoryUrl}</div>
-            
-            <div className="info-label">Git Source Export State:</div>
-            <div className="info-value">{repository.gitSourceExportState || 'Not started'}</div>
-            
-            <div className="info-label">Metadata Export State:</div>
-            <div className="info-value">{repository.metadataExportState || 'Not started'}</div>
-            
-            {repository.gitSourceExportId && (
-              <>
-                <div className="info-label">Git Source Export ID:</div>
-                <div className="info-value">{repository.gitSourceExportId}</div>
-              </>
-            )}
-            
-            {repository.metadataExportId && (
-              <>
-                <div className="info-label">Metadata Export ID:</div>
-                <div className="info-value">{repository.metadataExportId}</div>
-              </>
-            )}
-            
-            {repository.gitSourceArchiveUrl && (
-              <>
-                <div className="info-label">Git Source Archive:</div>
-                <div className="info-value">Available</div>
-              </>
-            )}
-            
-            {repository.metadataArchiveUrl && (
-              <>
-                <div className="info-label">Metadata Archive:</div>
-                <div className="info-value">Available</div>
-              </>
-            )}
-            
-            {repository.exportFailureReason && (
-              <>
-                <div className="info-label">Export Failure Reason:</div>
-                <div className="info-value" style={{ color: 'var(--color-danger-fg)' }}>
-                  {repository.exportFailureReason}
-                </div>
-              </>
-            )}
-            
-            <div className="info-label">Lock source repository:</div>
-            <div className="info-value">{repository.lockSource ? 'True' : 'False'}</div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface SettingsModalProps {
-  repository: RepositoryMigration;
-  onClose: () => void;
-  onUpdate: (lockSource: boolean, repositoryVisibility: string) => void;
-  onDelete: () => void;
-  onArchive?: () => void;
-  onUnarchive?: () => void;
-}
-
-function SettingsModal({ repository, onClose, onUpdate, onDelete, onArchive, onUnarchive }: SettingsModalProps) {
-  const [lockSource, setLockSource] = useState(repository.lockSource || false);
-  const [repositoryVisibility, setRepositoryVisibility] = useState(repository.repositoryVisibility || 'private');
-  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const isMigrationStarted = repository.state === 'queued' || repository.state === 'in_progress' || repository.state === 'completed' || repository.state === 'failed';
-  const isSettingsEditable = repository.state === 'pending' || repository.state === 'reset';
-  const isArchived = repository.archived || false;
-
-  // Sync local state with repository prop when it changes
-  useEffect(() => {
-    setLockSource(repository.lockSource || false);
-    setRepositoryVisibility(repository.repositoryVisibility || 'private');
-  }, [repository.lockSource, repository.repositoryVisibility]);
-
-  const handleCheckboxChange = async (checked: boolean) => {
-    setLockSource(checked);
-    await onUpdate(checked, repositoryVisibility);
-    setShowSaveConfirmation(true);
-    setTimeout(() => setShowSaveConfirmation(false), 2000);
-  };
-
-  const handleVisibilityChange = async (visibility: string) => {
-    setRepositoryVisibility(visibility);
-    await onUpdate(lockSource, visibility);
-    setShowSaveConfirmation(true);
-    setTimeout(() => setShowSaveConfirmation(false), 2000);
-  };
-
-  const handleDelete = () => {
-    setShowDeleteConfirmation(false);
-    onDelete();
-    onClose();
-  };
-
-  const handleArchive = () => {
-    if (onArchive) {
-      onArchive();
-      onClose();
-    }
-  };
-
-  const handleUnarchive = () => {
-    if (onUnarchive) {
-      onUnarchive();
-      onClose();
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Repository Settings</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label className="form-label">Repository Visibility</label>
-            <select
-              className="form-input"
-              value={repositoryVisibility}
-              onChange={(e) => handleVisibilityChange(e.target.value)}
-              disabled={!isSettingsEditable}
-            >
-              <option value="private">Private</option>
-              <option value="public">Public</option>
-              <option value="internal">Internal</option>
-            </select>
-            <div className="form-help">
-              {!isSettingsEditable 
-                ? 'This setting cannot be changed after migration has started or been completed'
-                : 'Select the visibility for the migrated repository'}
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-checkbox-wrapper">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={lockSource}
-                onChange={(e) => handleCheckboxChange(e.target.checked)}
-                disabled={isMigrationStarted}
-              />
-              <span className="form-checkbox-label">Lock source repository</span>
-            </label>
-            <div className="form-help">
-              {isMigrationStarted 
-                ? 'This setting cannot be changed after migration has started'
-                : 'Lock the source repository during migration to prevent modifications'}
-            </div>
-          </div>
-          {showSaveConfirmation && (
-            <div className="save-confirmation">
-              ✓ Setting saved
-            </div>
-          )}
-        </div>
-        <div className="modal-footer" style={{ justifyContent: 'flex-start' }}>
-          {isArchived ? (
-            <button 
-              className="btn btn-warning" 
-              onClick={handleUnarchive}
-              title="Unarchive this repository"
-              aria-label="Unarchive this repository"
-            >
-              Unarchive
-            </button>
-          ) : (
-            <button 
-              className="btn btn-warning" 
-              onClick={handleArchive}
-              title="Archive this repository"
-              aria-label="Archive this repository"
-            >
-              Archive
-            </button>
-          )}
-          <button 
-            className="btn btn-danger" 
-            onClick={() => setShowDeleteConfirmation(true)}
-            title="Delete this repository"
-            aria-label="Delete this repository"
-          >
-            Delete
-          </button>
-        </div>
-        {showDeleteConfirmation && (
-          <DeleteModal
-            repository={repository}
-            onClose={() => setShowDeleteConfirmation(false)}
-            onDelete={handleDelete}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface FailureModalProps {
-  failureReason: string;
-  onClose: () => void;
-}
-
-function FailureModal({ failureReason, onClose }: FailureModalProps) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2 className="modal-title">Migration Failed</h2>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body">
-          <p style={{ color: 'var(--color-danger-fg)', marginBottom: '16px' }}>
-            The migration failed with the following reason:
-          </p>
-          <div style={{ 
-            padding: '12px', 
-            backgroundColor: 'var(--color-canvas-subtle)', 
-            borderRadius: '6px',
-            border: '1px solid var(--color-border-default)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word'
-          }}>
-            {failureReason}
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-default" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
-  const [repositories, setRepositories] = useState<RepositoryMigration[]>([]);
+  const {
+    repositories,
+    runtimeConfig,
+    targetOrganization,
+    targetDescription,
+    sourceDescription,
+    mode,
+    isGHESMode,
+    errorMessage,
+    dismissError,
+
+    addRepository,
+    deleteRepository,
+    archiveRepository,
+    unarchiveRepository,
+    updateRepositorySettings,
+    resetRepository,
+    startMigration,
+    startExport,
+
+    handleStartSelected,
+    handleResetSelected,
+    handleBulkSettingsUpdate,
+    handleArchiveSelected,
+    handleUnarchiveSelected,
+    handleDeleteSelected,
+    handleCSVUpload,
+    handleScanOrg,
+  } = useRepositoryMigrations();
+
+  // --- UI-only state ---
   const [showAddModal, setShowAddModal] = useState(false);
   const [showScanOrgModal, setShowScanOrgModal] = useState(false);
   const [infoRepo, setInfoRepo] = useState<RepositoryMigration | null>(null);
@@ -854,10 +65,6 @@ export default function App() {
   const [settingsRepo, setSettingsRepo] = useState<RepositoryMigration | null>(null);
   const [resetRepo, setResetRepo] = useState<RepositoryMigration | null>(null);
   const [failureInfo, setFailureInfo] = useState<string | null>(null);
-  const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
-  const pollingReposRef = useRef<Set<string>>(new Set());
-  const [pollingExports, setPollingExports] = useState<Set<string>>(new Set());
-  const pollingExportsRef = useRef<Set<string>>(new Set());
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [showBulkSettingsModal, setShowBulkSettingsModal] = useState(false);
   const [showBulkResetConfirmation, setShowBulkResetConfirmation] = useState(false);
@@ -866,946 +73,23 @@ export default function App() {
   const [perPage, setPerPage] = useState(10);
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [showEnvironmentInfoModal, setShowEnvironmentInfoModal] = useState(false);
-  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
-  const targetOrganization = runtimeConfig?.targetOrganization || 'Not configured';
-  const targetDescription = runtimeConfig?.targetDescription || 'Not configured';
-  const sourceDescription = runtimeConfig?.sourceDescription || 'Not configured';
-  const mode = runtimeConfig?.mode || 'GH';
-  const isGHESMode = mode === 'GHES';
 
-  const refreshRepositories = useCallback(async () => {
-    try {
-      const nextRepositories = await apiClient.listRepositoryMigrations(true);
-      setRepositories(nextRepositories);
-    } catch (error) {
-      console.error('Error loading repositories:', error);
-    }
-  }, []);
-
-  const syncRepository = useCallback((nextRepository: RepositoryMigration) => {
-    setRepositories((currentRepositories) => {
-      const repositoryIndex = currentRepositories.findIndex(
-        (repository) => repository.id === nextRepository.id,
-      );
-
-      if (repositoryIndex === -1) {
-        return [...currentRepositories, nextRepository].sort((left, right) =>
-          left.repositoryName.localeCompare(right.repositoryName),
-        );
-      }
-
-      const updatedRepositories = [...currentRepositories];
-      updatedRepositories[repositoryIndex] = nextRepository;
-      return updatedRepositories;
-    });
-  }, []);
-
-  const removeRepositoryFromState = useCallback((id: string) => {
-    setRepositories((currentRepositories) =>
-      currentRepositories.filter((repository) => repository.id !== id),
-    );
-  }, []);
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    pollingReposRef.current = pollingRepos;
-  }, [pollingRepos]);
-
-  // Keep export polling ref in sync with state
-  useEffect(() => {
-    pollingExportsRef.current = pollingExports;
-  }, [pollingExports]);
-
-  // Define startPolling before it's used in effects
-  const startPolling = useCallback((repoId: string) => {
-    setPollingRepos(prev => new Set(prev).add(repoId));
-  }, []);
-
-  // Define startExportPolling before it's used
-  const startExportPolling = useCallback((repoId: string) => {
-    setPollingExports(prev => new Set(prev).add(repoId));
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    void getRuntimeConfig().then((nextRuntimeConfig) => {
-      if (isMounted) {
-        setRuntimeConfig(nextRuntimeConfig);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    void refreshRepositories();
-  }, [refreshRepositories]);
-
-  // Resume polling for repositories that are in progress or queued on page load/refresh
-  useEffect(() => {
-    repositories.forEach(repo => {
-      // Start polling for repositories that are in_progress or queued and have a repositoryMigrationId
-      // Check ref to avoid unnecessary state updates
-      if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
-        startPolling(repo.id);
-      }
-      
-      // Start export polling for repositories with exports in progress
-      if (isGHESMode && repo.gitSourceExportId && repo.metadataExportId && !pollingExportsRef.current.has(repo.id)) {
-        const gitSourceInProgress = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
-        const metadataInProgress = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
-        
-        if (gitSourceInProgress || metadataInProgress) {
-          // Extract organization name from source URL
-          const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
-          if (match) {
-            startExportPolling(repo.id);
-          }
-        }
-      }
-    });
-  }, [repositories, startPolling, startExportPolling, isGHESMode]);
-
-  // Keep settingsRepo in sync with repositories array when data changes
+  // Keep settingsRepo in sync with repositories array
   useEffect(() => {
     if (settingsRepo) {
       const updatedRepo = repositories.find(r => r.id === settingsRepo.id);
-      if (updatedRepo) {
-        setSettingsRepo(updatedRepo);
-      }
+      if (updatedRepo) setSettingsRepo(updatedRepo);
     }
   }, [repositories, settingsRepo]);
 
-  const addRepository = async (url: string, name: string, lockSource: boolean, repositoryVisibility: string) => {
-    const repository = await apiClient.createRepositoryMigration({
-      sourceRepositoryUrl: url,
-      repositoryName: name,
-      state: 'pending',
-      lockSource,
-      repositoryVisibility,
-      archived: false,
-    });
-
-    syncRepository(repository);
-  };
-
-  const deleteRepository = async (id: string) => {
-    await apiClient.deleteRepositoryMigration(id);
-    removeRepositoryFromState(id);
-  };
-
-  const archiveRepository = async (repo: RepositoryMigration) => {
-    const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-      archived: true,
-    });
-
-    syncRepository(updatedRepository);
-  };
-
-  const unarchiveRepository = async (repo: RepositoryMigration) => {
-    const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-      archived: false,
-    });
-
-    syncRepository(updatedRepository);
-  };
-
-  const updateRepositorySettings = async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: string) => {
-    const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-      lockSource,
-      repositoryVisibility,
-    });
-
-    syncRepository(updatedRepository);
-  };
-
-  const resetRepository = async (repo: RepositoryMigration, resetExport: boolean = false) => {
-    try {
-      // Delete target repository if migration was started
-      if (repo.repositoryName) {
-        console.log('Deleting target repository:', repo.repositoryName);
-        const deleteResult = await apiClient.deleteTargetRepo(repo.repositoryName);
-        console.log('Delete result:', deleteResult);
-      }
-
-      // In GHES mode, only unlock if resetExport is true
-      // In GH mode, always unlock
-      const shouldUnlock = isGHESMode ? resetExport : true;
-      
-      // Unlock source repository if it was locked
-      // In GHES mode (after export), we only need sourceRepositoryUrl
-      // In GH mode (after migration), we need migrationSourceId and repositoryName as well
-      if (shouldUnlock && repo.lockSource && repo.sourceRepositoryUrl) {
-        // Only call unlock if we have the required fields based on the mode and state
-        const hasRequiredFields = isGHESMode 
-          ? true  // In GHES mode, sourceRepositoryUrl is sufficient
-          : (repo.migrationSourceId && repo.repositoryName); // In GH mode, need migration fields
-        
-        if (hasRequiredFields) {
-          console.log('Unlocking source repository:', repo.sourceRepositoryUrl);
-          const unlockResult = await apiClient.unlockSourceRepo({
-            sourceRepositoryUrl: repo.sourceRepositoryUrl,
-            migrationSourceId: repo.migrationSourceId || '',
-            repositoryName: repo.repositoryName || '',
-          });
-          console.log('Unlock result:', unlockResult);
-        }
-      }
-
-      // Update the repository record
-      const updateFields: {
-        state: string;
-        migrationSourceId: string;
-        repositoryMigrationId: string;
-        lockSource: boolean;
-        repositoryVisibility: string;
-        failureReason: string;
-        gitSourceExportId?: string;
-        metadataExportId?: string;
-        gitSourceExportState?: string;
-        metadataExportState?: string;
-        gitSourceArchiveUrl?: string;
-        metadataArchiveUrl?: string;
-        exportFailureReason?: string;
-      } = {
-        state: 'reset',
-        migrationSourceId: '',
-        repositoryMigrationId: '',
-        lockSource: shouldUnlock ? false : (repo.lockSource ?? false), // Keep lockSource if not unlocking in GHES mode
-        repositoryVisibility: 'private', // Reset to default
-        failureReason: '',
-      };
-
-      // If resetExport is true, also clear export fields
-      if (resetExport) {
-        updateFields.gitSourceExportId = '';
-        updateFields.metadataExportId = '';
-        updateFields.gitSourceExportState = '';
-        updateFields.metadataExportState = '';
-        updateFields.gitSourceArchiveUrl = '';
-        updateFields.metadataArchiveUrl = '';
-        updateFields.exportFailureReason = '';
-      }
-
-      const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, updateFields);
-      syncRepository(updatedRepository);
-      setPollingRepos((currentPollingRepos) => {
-        const nextPollingRepos = new Set(currentPollingRepos);
-        nextPollingRepos.delete(repo.id);
-        return nextPollingRepos;
-      });
-      setPollingExports((currentPollingExports) => {
-        const nextPollingExports = new Set(currentPollingExports);
-        nextPollingExports.delete(repo.id);
-        return nextPollingExports;
-      });
-
-      console.log('Repository reset successfully');
-    } catch (error) {
-      console.error('Error resetting repository:', error);
-      // Still update the state even if the API calls failed
-      const shouldUnlock = isGHESMode ? resetExport : true;
-      const updateFields: {
-        state: string;
-        migrationSourceId: string;
-        repositoryMigrationId: string;
-        lockSource: boolean;
-        repositoryVisibility: string;
-        failureReason: string;
-        gitSourceExportId?: string;
-        metadataExportId?: string;
-        gitSourceExportState?: string;
-        metadataExportState?: string;
-        gitSourceArchiveUrl?: string;
-        metadataArchiveUrl?: string;
-        exportFailureReason?: string;
-      } = {
-        state: 'reset',
-        migrationSourceId: '',
-        repositoryMigrationId: '',
-        lockSource: shouldUnlock ? false : (repo.lockSource ?? false), // Keep lockSource if not unlocking in GHES mode
-        repositoryVisibility: 'private', // Reset to default
-        failureReason: error instanceof Error ? error.message : 'Error during reset',
-      };
-
-      if (resetExport) {
-        updateFields.gitSourceExportId = '';
-        updateFields.metadataExportId = '';
-        updateFields.gitSourceExportState = '';
-        updateFields.metadataExportState = '';
-        updateFields.gitSourceArchiveUrl = '';
-        updateFields.metadataArchiveUrl = '';
-        updateFields.exportFailureReason = '';
-      }
-
-      const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, updateFields);
-      syncRepository(updatedRepository);
-    }
-  };
-
-  const startMigration = async (repo: RepositoryMigration) => {
-    try {
-      // Optimistic update: Set state to queued immediately for user feedback
-      const queuedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-        state: 'queued',
-        failureReason: '',
-      });
-      syncRepository(queuedRepository);
-
-      // For GHES mode, pass archive URLs
-      const ghesParams = isGHESMode ? {
-        gitSourceArchiveUrl: repo.gitSourceArchiveUrl || undefined,
-        metadataArchiveUrl: repo.metadataArchiveUrl || undefined,
-      } : {};
-
-      // Call the startMigration function
-      // Pass destinationOwnerId if it exists to skip the API call to fetch it
-      const result = await apiClient.startMigration({
-        sourceRepositoryUrl: repo.sourceRepositoryUrl,
-        repositoryName: repo.repositoryName,
-        targetRepoVisibility: repo.repositoryVisibility || 'private',
-        continueOnError: true,
-        lockSource: repo.lockSource || false,
-        destinationOwnerId: repo.destinationOwnerId || undefined,
-        ...ghesParams,
-      });
-
-      console.log('Migration started:', result);
-
-      if (result.success) {
-        const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-          repositoryMigrationId: result.migrationId,
-          migrationSourceId: result.migrationSourceId,
-          destinationOwnerId: result.ownerId,
-          failureReason: '',
-        });
-        syncRepository(updatedRepository);
-        startPolling(repo.id);
-      } else {
-        const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-          state: 'failed',
-          failureReason: result.message || 'Failed to start migration',
-        });
-        syncRepository(failedRepository);
-      }
-    } catch (error) {
-      console.error('Error starting migration:', error);
-      const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-        state: 'failed',
-        failureReason: error instanceof Error ? error.message : 'Unknown error',
-      });
-      syncRepository(failedRepository);
-    }
-  };
-
-  const startExport = async (repo: RepositoryMigration) => {
-    try {
-      // Extract organization name from source URL
-      const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
-      if (!match) {
-        throw new Error('Could not extract organization name from source URL');
-      }
-      const organizationName = match[1];
-
-      // Optimistic update: Set export states to pending
-        const pendingRepository = await apiClient.updateRepositoryMigration(repo.id, {
-          gitSourceExportState: 'pending',
-          metadataExportState: 'pending',
-        });
-        syncRepository(pendingRepository);
-
-        const result = await apiClient.startExport({
-        organizationName,
-        repositoryNames: [repo.repositoryName],
-        lockSource: repo.lockSource || false,
-      });
-
-      console.log('Export started:', result);
-
-        if (result.success) {
-          const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-            gitSourceExportId: String(result.gitSourceExportId),
-            metadataExportId: String(result.metadataExportId),
-            gitSourceExportState: result.gitSourceExportState,
-            metadataExportState: result.metadataExportState,
-            exportFailureReason: '',
-          });
-          syncRepository(updatedRepository);
-          startExportPolling(repo.id);
-        } else {
-          const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-            gitSourceExportState: 'failed',
-            metadataExportState: 'failed',
-            exportFailureReason: result.message || 'Failed to start export',
-          });
-          syncRepository(failedRepository);
-      }
-    } catch (error) {
-      console.error('Error starting export:', error);
-        const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-        gitSourceExportState: 'failed',
-        metadataExportState: 'failed',
-        exportFailureReason: error instanceof Error ? error.message : 'Unknown error',
-      });
-        syncRepository(failedRepository);
-    }
-  };
-
-  const checkMigrationStatus = useCallback(async (repoId: string, migrationId: string) => {
-    try {
-        const response = await apiClient.checkMigrationStatus(migrationId);
-
-        if (response.success) {
-          const state = response.state.toLowerCase();
-          const normalizedState = state === 'succeeded' ? 'completed' : state;
-          const updatedRepository = await apiClient.updateRepositoryMigration(repoId, {
-            state: normalizedState,
-            failureReason: response.failureReason || '',
-          });
-          syncRepository(updatedRepository);
-
-          if (state === 'failed' || state === 'succeeded' || state === 'completed') {
-            setPollingRepos(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(repoId);
-              return newSet;
-            });
-          }
-      }
-    } catch (error) {
-      console.error('Error checking migration status:', error);
-    }
-  }, [syncRepository]);
-
-  const checkExportStatus = useCallback(async (repoId: string, organizationName: string, gitSourceExportId: string, metadataExportId: string) => {
-    try {
-        const [gitSourceResponse, metadataResponse] = await Promise.all([
-          apiClient.checkExportStatus(organizationName, gitSourceExportId),
-          apiClient.checkExportStatus(organizationName, metadataExportId),
-        ]);
-
-        if (gitSourceResponse.success && metadataResponse.success) {
-          const updatedRepository = await apiClient.updateRepositoryMigration(repoId, {
-            gitSourceExportState: gitSourceResponse.state,
-            metadataExportState: metadataResponse.state,
-            gitSourceArchiveUrl: gitSourceResponse.archiveUrl || '',
-            metadataArchiveUrl: metadataResponse.archiveUrl || '',
-          });
-          syncRepository(updatedRepository);
-
-          const gitSourceComplete = gitSourceResponse.state === 'exported' || gitSourceResponse.state === 'failed';
-          const metadataComplete = metadataResponse.state === 'exported' || metadataResponse.state === 'failed';
-
-          if (gitSourceComplete && metadataComplete) {
-            setPollingExports(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(repoId);
-              return newSet;
-            });
-          }
-      }
-    } catch (error) {
-      console.error('Error checking export status:', error);
-    }
-  }, [syncRepository]);
-
-  // Polling effect
-  useEffect(() => {
-    if (pollingRepos.size === 0) return;
-
-    const interval = setInterval(() => {
-      repositories.forEach(repo => {
-        if (pollingRepos.has(repo.id) && repo.repositoryMigrationId) {
-          checkMigrationStatus(repo.id, repo.repositoryMigrationId);
-        }
-      });
-    }, 30000); // Poll every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [pollingRepos, repositories, checkMigrationStatus]);
-
-  // Export polling effect
-  useEffect(() => {
-    if (pollingExports.size === 0 || !isGHESMode) return;
-
-    const interval = setInterval(() => {
-      repositories.forEach(repo => {
-        if (pollingExports.has(repo.id) && repo.gitSourceExportId && repo.metadataExportId) {
-          // Extract organization name from source URL
-          const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
-          if (match) {
-            const organizationName = match[1];
-            checkExportStatus(repo.id, organizationName, repo.gitSourceExportId, repo.metadataExportId);
-          }
-        }
-      });
-    }, 30000); // Poll every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [pollingExports, repositories, checkExportStatus, isGHESMode]);
-
-  const getMigrationButtonClass = (state?: string | null) => {
-    switch (state) {
-      case 'queued':
-      case 'in_progress':
-        return 'btn-status-in-progress';
-      case 'completed':
-        return 'btn-status-completed';
-      case 'failed':
-        return 'btn-status-failed';
-      case 'reset':
-      case 'pending':
-      default:
-        return 'btn-primary';
-    }
-  };
-
-  const getMigrationButtonText = (state?: string | null) => {
-    switch (state) {
-      case 'queued':
-      case 'in_progress':
-        return 'In Progress';
-      case 'completed':
-        return 'Completed';
-      case 'failed':
-        return 'Failed';
-      case 'reset':
-      case 'pending':
-      default:
-        return 'Start Migration';
-    }
-  };
-
-  const getStatusButtonClass = (state?: string | null, exportState?: { git?: string | null; metadata?: string | null }) => {
-    // For GHES mode, check export states first
-    if (isGHESMode && exportState) {
-      const gitExporting = exportState.git === 'pending' || exportState.git === 'exporting';
-      const metadataExporting = exportState.metadata === 'pending' || exportState.metadata === 'exporting';
-      
-      if (gitExporting || metadataExporting) {
-        return 'btn-status-in-progress';
-      }
-      
-      const gitFailed = exportState.git === 'failed';
-      const metadataFailed = exportState.metadata === 'failed';
-      
-      if (gitFailed || metadataFailed) {
-        return 'btn-status-failed';
-      }
-    }
-    
-    switch (state) {
-      case 'queued':
-      case 'in_progress':
-        return 'btn-status-in-progress';
-      case 'completed':
-        return 'btn-status-completed';
-      case 'failed':
-        return 'btn-status-failed';
-      case 'reset':
-        return 'btn-primary';
-      default:
-        return 'btn-primary';
-    }
-  };
-
-  const getStatusButtonText = (state?: string | null, exportState?: { git?: string | null; metadata?: string | null }) => {
-    // For GHES mode, check export states first
-    if (isGHESMode && exportState) {
-      const gitExporting = exportState.git === 'pending' || exportState.git === 'exporting';
-      const metadataExporting = exportState.metadata === 'pending' || exportState.metadata === 'exporting';
-      
-      if (gitExporting || metadataExporting) {
-        return 'Exporting';
-      }
-      
-      const gitFailed = exportState.git === 'failed';
-      const metadataFailed = exportState.metadata === 'failed';
-      
-      if (gitFailed || metadataFailed) {
-        return 'Export Failed';
-      }
-      
-      const gitExported = exportState.git === 'exported';
-      const metadataExported = exportState.metadata === 'exported';
-      
-      // Both exports completed, show Start Migration
-      if (gitExported && metadataExported) {
-        // If migration already started, show its state
-        if (state && state !== 'pending' && state !== 'reset') {
-          // Fall through to migration state handling
-        } else {
-          return 'Start Migration';
-        }
-      } else {
-        // Exports not complete
-        return 'Start Export';
-      }
-    }
-    
-    switch (state) {
-      case 'queued':
-      case 'in_progress':
-        return 'In Progress';
-      case 'completed':
-        return 'Completed';
-      case 'failed':
-        return 'Failed';
-      case 'reset':
-        return isGHESMode ? 'Start Export' : 'Start Migration';
-      default:
-        return isGHESMode ? 'Start Export' : 'Start Migration';
-    }
-  };
-
-  const canStartMigration = (repo: RepositoryMigration) => {
-    if (!isGHESMode) return true;
-    
-    // In GHES mode, both exports must be completed
-    return repo.gitSourceExportState === 'exported' && 
-           repo.metadataExportState === 'exported' &&
-           !!repo.gitSourceArchiveUrl &&
-           !!repo.metadataArchiveUrl;
-  };
-
-  const getExportButtonClass = (repo: RepositoryMigration) => {
-    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
-    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
-    
-    if (gitExporting || metadataExporting) {
-      return 'btn-status-in-progress';
-    }
-    
-    const gitFailed = repo.gitSourceExportState === 'failed';
-    const metadataFailed = repo.metadataExportState === 'failed';
-    
-    if (gitFailed || metadataFailed) {
-      return 'btn-status-failed';
-    }
-    
-    const gitExported = repo.gitSourceExportState === 'exported';
-    const metadataExported = repo.metadataExportState === 'exported';
-    
-    if (gitExported && metadataExported) {
-      return 'btn-status-completed';
-    }
-    
-    return 'btn-primary';
-  };
-
-  const getExportButtonText = (repo: RepositoryMigration) => {
-    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
-    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
-    
-    if (gitExporting || metadataExporting) {
-      return 'Exporting';
-    }
-    
-    const gitFailed = repo.gitSourceExportState === 'failed';
-    const metadataFailed = repo.metadataExportState === 'failed';
-    
-    if (gitFailed || metadataFailed) {
-      return 'Export Failed';
-    }
-    
-    const gitExported = repo.gitSourceExportState === 'exported';
-    const metadataExported = repo.metadataExportState === 'exported';
-    
-    if (gitExported && metadataExported) {
-      return 'Export Completed';
-    }
-    
-    return 'Start Export';
-  };
-
-  const handleExportButtonClick = (repo: RepositoryMigration) => {
-    const gitExported = repo.gitSourceExportState === 'exported';
-    const metadataExported = repo.metadataExportState === 'exported';
-    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
-    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
-    const gitFailed = repo.gitSourceExportState === 'failed';
-    const metadataFailed = repo.metadataExportState === 'failed';
-    
-    // If export is in progress, failed, or completed, show details
-    if (gitExporting || metadataExporting || gitFailed || metadataFailed || (gitExported && metadataExported)) {
-      setExportInfoRepo(repo);
-    } else {
-      // Otherwise start the export
-      startExport(repo);
-    }
-  };
-
-  const handleMigrationButtonClick = (repo: RepositoryMigration) => {
-    // If migration not started, start it
-    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
-      startMigration(repo);
-    } else {
-      // Otherwise show migration details
-      setInfoRepo(repo);
-    }
-  };
-
-  const handleStatusButtonClick = (repo: RepositoryMigration) => {
-    const exportState = isGHESMode ? {
-      git: repo.gitSourceExportState,
-      metadata: repo.metadataExportState,
-    } : undefined;
-    
-    // For GHES mode, handle export states
-    if (isGHESMode && exportState) {
-      const gitExporting = exportState.git === 'pending' || exportState.git === 'exporting';
-      const metadataExporting = exportState.metadata === 'pending' || exportState.metadata === 'exporting';
-      
-      if (gitExporting || metadataExporting) {
-        // Show info modal during export
-        setInfoRepo(repo);
-        return;
-      }
-      
-      const gitFailed = exportState.git === 'failed';
-      const metadataFailed = exportState.metadata === 'failed';
-      
-      if (gitFailed || metadataFailed) {
-        // Show info modal for export failure
-        setInfoRepo(repo);
-        return;
-      }
-      
-      const gitExported = exportState.git === 'exported';
-      const metadataExported = exportState.metadata === 'exported';
-      
-      // If both exports completed and migration not started, start migration
-      if (gitExported && metadataExported && (!repo.state || repo.state === 'pending' || repo.state === 'reset')) {
-        startMigration(repo);
-        return;
-      }
-      
-      // If exports not complete, start export
-      if (!gitExported || !metadataExported) {
-        if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
-          startExport(repo);
-          return;
-        }
-      }
-    }
-    
-    // Non-GHES mode or migration already started
-    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
-      startMigration(repo);
-    } else {
-      // Otherwise, show the info modal
-      setInfoRepo(repo);
-    }
-  };
-
-  // CSV handling
-  const handleCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      // Skip header line if it exists
-      const dataLines = lines[0].toLowerCase().includes('source_repo_url') ? lines.slice(1) : lines;
-      
-      for (const line of dataLines) {
-        const [sourceRepoUrl, repoVisibility, lockSourceStr] = line.split(',').map(s => s.trim());
-        if (sourceRepoUrl) {
-          // Check if repository already exists in the database
-          const existingRepo = repositories.find(r => r.sourceRepositoryUrl === sourceRepoUrl);
-          if (existingRepo) {
-            console.log(`Skipping ${sourceRepoUrl} - already exists in database`);
-            continue;
-          }
-          
-          // Extract repo name from URL
-          const match = sourceRepoUrl.match(/github\.com\/[^\/]+\/([^\/]+)/);
-          const repoName = match ? match[1].replace(/\.git$/, '') : '';
-          
-          if (repoName) {
-            const lockSource = lockSourceStr?.toLowerCase() === 'true';
-            const visibility = repoVisibility || 'private';
-
-            const repository = await apiClient.createRepositoryMigration({
-              sourceRepositoryUrl: sourceRepoUrl,
-              repositoryName: repoName,
-              state: 'pending',
-              lockSource,
-              repositoryVisibility: visibility,
-              archived: false,
-            });
-            syncRepository(repository);
-          }
-        }
-      }
-    };
-    reader.readAsText(file);
-    // Reset the input so the same file can be uploaded again
-    event.target.value = '';
-  };
-
-  const handleScanOrg = async (orgName: string, repositoryVisibility: string, lockSource: boolean) => {
-    try {
-      console.log(`Scanning organization: ${orgName}`);
-
-      const result = await apiClient.scanSourceOrg(orgName);
-
-      console.log('Scan result:', result);
-
-      if (result.success && result.repositories) {
-        console.log(`Found ${result.repositories.length} repositories`);
-
-        let addedCount = 0;
-        let skippedCount = 0;
-
-        for (const repo of result.repositories) {
-          const existingRepo = repositories.find(r => r.sourceRepositoryUrl === repo.html_url);
-          if (existingRepo) {
-            console.log(`Skipping ${repo.name} - already exists in database`);
-            skippedCount++;
-            continue;
-          }
-
-          const createdRepository = await apiClient.createRepositoryMigration({
-            sourceRepositoryUrl: repo.html_url,
-            repositoryName: repo.name,
-            state: 'pending',
-            lockSource,
-            repositoryVisibility,
-            archived: false,
-          });
-          syncRepository(createdRepository);
-          addedCount++;
-        }
-
-        console.log(`Added ${addedCount} repositories, skipped ${skippedCount} existing repositories`);
-        alert(`Successfully scanned ${orgName}!\nAdded: ${addedCount} repositories\nSkipped: ${skippedCount} existing repositories`);
-      } else {
-        console.error('Scan failed:', result);
-        alert('Failed to scan organization');
-      }
-      
-      setShowScanOrgModal(false);
-    } catch (error) {
-      console.error('Error scanning organization:', error);
-      alert(`Error scanning organization: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedRepos(new Set(filteredRepositories.map(r => r.id)));
-    } else {
-      setSelectedRepos(new Set());
-    }
-  };
-
-  const handleSelectRepo = (repoId: string, checked: boolean) => {
-    const newSelected = new Set(selectedRepos);
-    if (checked) {
-      newSelected.add(repoId);
-    } else {
-      newSelected.delete(repoId);
-    }
-    setSelectedRepos(newSelected);
-  };
-
-  const handleStartSelected = async () => {
-    const selectedRepoObjects = repositories.filter(r => 
-      selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset')
-    );
-    
-    for (const repo of selectedRepoObjects) {
-      // In GHES mode, check if we need to start export first
-      if (isGHESMode) {
-        const gitExported = repo.gitSourceExportState === 'exported';
-        const metadataExported = repo.metadataExportState === 'exported';
-        const exportsCompleted = gitExported && metadataExported;
-        
-        if (!exportsCompleted) {
-          // Start export if not yet completed
-          await startExport(repo);
-        } else {
-          // Exports are completed, start migration
-          await startMigration(repo);
-        }
-      } else {
-        // GH mode: directly start migration
-        await startMigration(repo);
-      }
-    }
-  };
-
-  const handleResetSelected = async (resetExport: boolean = false) => {
-    const selectedRepoObjects = repositories.filter(r => {
-      if (!selectedRepos.has(r.id)) return false;
-      
-      // In GH mode: exclude 'pending' and 'reset' states
-      if (!isGHESMode) {
-        return r.state !== 'pending' && r.state !== 'reset';
-      }
-      
-      // In GHES mode: allow reset if exports are completed, even if state is 'pending' or 'reset'
-      if (r.state === 'pending' || r.state === 'reset') {
-        const exportsCompleted = r.gitSourceExportState === 'exported' && 
-                                 r.metadataExportState === 'exported';
-        return exportsCompleted;
-      }
-      
-      // For other states in GHES mode, allow reset
-      return true;
-    });
-    
-    for (const repo of selectedRepoObjects) {
-      await resetRepository(repo, resetExport);
-    }
-  };
-
-  const handleBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: string) => {
-    const selectedRepoObjects = repositories.filter(r => 
-      selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset')
-    );
-    
-    for (const repo of selectedRepoObjects) {
-      await updateRepositorySettings(repo, lockSource, repositoryVisibility);
-    }
-  };
-
-  const handleArchiveSelected = async () => {
-    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id));
-    
-    for (const repo of selectedRepoObjects) {
-      await archiveRepository(repo);
-    }
-    
-    setSelectedRepos(new Set());
-  };
-
-  const handleUnarchiveSelected = async () => {
-    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id));
-    
-    for (const repo of selectedRepoObjects) {
-      await unarchiveRepository(repo);
-    }
-    
-    setSelectedRepos(new Set());
-  };
-
-  const handleDeleteSelected = async () => {
-    const selectedRepoObjects = repositories.filter(r => selectedRepos.has(r.id));
-    
-    for (const repo of selectedRepoObjects) {
-      await deleteRepository(repo.id);
-    }
-    
-    setSelectedRepos(new Set());
-  };
+  // --- Derived state ---
+  const filteredRepositories = repositories.filter(repo =>
+    showArchiveView ? (repo.archived === true) : (repo.archived !== true)
+  );
+  const totalPages = Math.ceil(filteredRepositories.length / perPage);
+  const startIndex = (currentPage - 1) * perPage;
+  const endIndex = startIndex + perPage;
+  const paginatedRepositories = filteredRepositories.slice(startIndex, endIndex);
 
   const canStartSelected = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
@@ -1814,45 +98,7 @@ export default function App() {
 
   const canResetSelected = Array.from(selectedRepos).some(id => {
     const repo = repositories.find(r => r.id === id);
-    if (!repo || repo.archived) return false;
-    
-    // In GH mode: can reset if state is not 'pending' or 'reset'
-    if (!isGHESMode) {
-      return repo.state !== 'pending' && repo.state !== 'reset';
-    }
-    
-    // In GHES mode: apply the same logic as individual Reset button
-    // Can reset if:
-    // 1. State is 'reset' AND both exports are 'exported'
-    // 2. State is 'pending' AND both exports are 'exported' (not pending/exporting)
-    // 3. State is anything else (completed, failed, in_progress)
-    
-    if (repo.state === 'reset') {
-      // Only enable if both exports are exported
-      return repo.gitSourceExportState === 'exported' && 
-             repo.metadataExportState === 'exported';
-    }
-    
-    if (repo.state === 'pending') {
-      // Only enable if exports are completed (not pending or exporting)
-      const gitExported = repo.gitSourceExportState === 'exported';
-      const metadataExported = repo.metadataExportState === 'exported';
-      const exportsCompleted = gitExported && metadataExported;
-      
-      // Disable if exports are pending or in progress
-      const exportsInProgress = 
-        !repo.gitSourceExportState || 
-        !repo.metadataExportState ||
-        repo.gitSourceExportState === 'pending' ||
-        repo.metadataExportState === 'pending' ||
-        repo.gitSourceExportState === 'exporting' ||
-        repo.metadataExportState === 'exporting';
-      
-      return !exportsInProgress && exportsCompleted;
-    }
-    
-    // For other states (completed, failed, in_progress), always enable
-    return true;
+    return repo ? canResetRepository(repo, isGHESMode) : false;
   });
 
   const canUpdateSettings = Array.from(selectedRepos).some(id => {
@@ -1860,32 +106,141 @@ export default function App() {
     return repo && (repo.state === 'pending' || repo.state === 'reset' || repo.state === 'completed');
   });
 
-  // Pagination logic
-  const filteredRepositories = repositories.filter(repo => 
-    showArchiveView ? (repo.archived === true) : (repo.archived !== true)
-  );
-  const totalPages = Math.ceil(filteredRepositories.length / perPage);
-  const startIndex = (currentPage - 1) * perPage;
-  const endIndex = startIndex + perPage;
-  const paginatedRepositories = filteredRepositories.slice(startIndex, endIndex);
-
-  // Reset to page 1 if current page is out of bounds
+  // Reset page when out of bounds
   useEffect(() => {
-    if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(1);
-    }
+    if (currentPage > totalPages && totalPages > 0) setCurrentPage(1);
   }, [currentPage, totalPages]);
 
-  // Reset to page 1 when toggling archive view
+  // Reset page when toggling archive view
   useEffect(() => {
     setCurrentPage(1);
     setSelectedRepos(new Set());
   }, [showArchiveView]);
 
+  // --- Handlers ---
+
   const handlePerPageChange = (newPerPage: number) => {
     setPerPage(newPerPage);
-    setCurrentPage(1); // Reset to first page when changing per page
+    setCurrentPage(1);
   };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedRepos(checked ? new Set(filteredRepositories.map(r => r.id)) : new Set());
+  };
+
+  const handleSelectRepo = (repoId: string, checked: boolean) => {
+    const next = new Set(selectedRepos);
+    checked ? next.add(repoId) : next.delete(repoId);
+    setSelectedRepos(next);
+  };
+
+  const onCSVUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target?.result as string;
+      await handleCSVUpload(text);
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
+  const onScanOrg = async (orgName: string, repositoryVisibility: string, lockSource: boolean) => {
+    const result = await handleScanOrg(orgName, repositoryVisibility, lockSource);
+    if (result.success) {
+      alert(`Successfully scanned ${orgName}!\nAdded: ${result.addedCount} repositories\nSkipped: ${result.skippedCount} existing repositories`);
+    }
+    setShowScanOrgModal(false);
+  };
+
+  const onStartSelected = async () => {
+    await handleStartSelected(selectedRepos);
+  };
+
+  const onResetSelected = async (resetExport: boolean = false) => {
+    await handleResetSelected(selectedRepos, resetExport);
+  };
+
+  const onBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: RepoVisibility) => {
+    await handleBulkSettingsUpdate(selectedRepos, lockSource, repositoryVisibility);
+  };
+
+  const onArchiveSelected = useCallback(async () => {
+    await handleArchiveSelected(selectedRepos);
+    setSelectedRepos(new Set());
+  }, [handleArchiveSelected, selectedRepos]);
+
+  const onUnarchiveSelected = useCallback(async () => {
+    await handleUnarchiveSelected(selectedRepos);
+    setSelectedRepos(new Set());
+  }, [handleUnarchiveSelected, selectedRepos]);
+
+  const onDeleteSelected = useCallback(async () => {
+    await handleDeleteSelected(selectedRepos);
+    setSelectedRepos(new Set());
+  }, [handleDeleteSelected, selectedRepos]);
+
+  const handleExportButtonClick = (repo: RepositoryMigration) => {
+    const gitExported = repo.gitSourceExportState === 'exported';
+    const metadataExported = repo.metadataExportState === 'exported';
+    const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+    const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+    const gitFailed = repo.gitSourceExportState === 'failed';
+    const metadataFailed = repo.metadataExportState === 'failed';
+
+    if (gitExporting || metadataExporting || gitFailed || metadataFailed || (gitExported && metadataExported)) {
+      setExportInfoRepo(repo);
+    } else {
+      startExport(repo);
+    }
+  };
+
+  const handleMigrationButtonClick = (repo: RepositoryMigration) => {
+    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
+      startMigration(repo);
+    } else {
+      setInfoRepo(repo);
+    }
+  };
+
+  const handleStatusButtonClick = (repo: RepositoryMigration) => {
+    if (isGHESMode) {
+      const gitExporting = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+      const metadataExporting = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
+
+      if (gitExporting || metadataExporting) { setInfoRepo(repo); return; }
+
+      const gitFailed = repo.gitSourceExportState === 'failed';
+      const metadataFailed = repo.metadataExportState === 'failed';
+
+      if (gitFailed || metadataFailed) { setInfoRepo(repo); return; }
+
+      const gitExported = repo.gitSourceExportState === 'exported';
+      const metadataExported = repo.metadataExportState === 'exported';
+
+      if (gitExported && metadataExported && (!repo.state || repo.state === 'pending' || repo.state === 'reset')) {
+        startMigration(repo);
+        return;
+      }
+
+      if (!gitExported || !metadataExported) {
+        if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
+          startExport(repo);
+          return;
+        }
+      }
+    }
+
+    if (!repo.state || repo.state === 'pending' || repo.state === 'reset') {
+      startMigration(repo);
+    } else {
+      setInfoRepo(repo);
+    }
+  };
+
+  // --- Render ---
 
   if (!runtimeConfig) {
     return (
@@ -1903,6 +258,10 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {errorMessage && (
+        <ErrorToast message={errorMessage} onDismiss={dismissError} />
+      )}
+
       <header className="app-header">
         <div>
           <h1 className="app-title">GitHub Repository Migration</h1>
@@ -1913,8 +272,8 @@ export default function App() {
         <div className="repository-list-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h2 className="repository-list-title">Repositories</h2>
-            <button 
-              className="btn btn-default btn-sm btn-icon" 
+            <button
+              className="btn btn-default btn-sm btn-icon"
               onClick={() => setShowEnvironmentInfoModal(true)}
               title="View environment information"
               aria-label="View environment information"
@@ -1925,8 +284,8 @@ export default function App() {
           <div className="repository-list-actions">
             {!showArchiveView ? (
               <>
-                <button 
-                  className="btn btn-blue" 
+                <button
+                  className="btn btn-blue"
                   onClick={() => setShowScanOrgModal(true)}
                   title="Scan a source organization for repositories"
                 >
@@ -1940,29 +299,29 @@ export default function App() {
                   accept=".csv"
                   style={{ display: 'none' }}
                   id="csv-upload"
-                  onChange={handleCSVUpload}
+                  onChange={onCSVUpload}
                 />
                 <label htmlFor="csv-upload" className="btn btn-default">
                   Load CSV File
                 </label>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleStartSelected}
+                <button
+                  className="btn btn-primary"
+                  onClick={onStartSelected}
                   disabled={!canStartSelected || selectedRepos.size === 0}
                   title={selectedRepos.size === 0 ? 'Select repositories to start' : 'Start selected migrations'}
                 >
                   Start Selected
                 </button>
-                <button 
-                  className="btn btn-danger" 
+                <button
+                  className="btn btn-danger"
                   onClick={() => setShowBulkResetConfirmation(true)}
                   disabled={!canResetSelected || selectedRepos.size === 0}
                   title={selectedRepos.size === 0 ? 'Select repositories to reset' : 'Reset selected migrations'}
                 >
                   Reset Selected
                 </button>
-                <button 
-                  className="btn btn-default btn-icon" 
+                <button
+                  className="btn btn-default btn-icon"
                   onClick={() => setShowBulkSettingsModal(true)}
                   disabled={!canUpdateSettings || selectedRepos.size === 0}
                   title={selectedRepos.size === 0 ? 'Select repositories to update settings' : 'Update settings for selected'}
@@ -1972,16 +331,16 @@ export default function App() {
               </>
             ) : (
               <>
-                <button 
-                  className="btn btn-warning" 
-                  onClick={handleUnarchiveSelected}
+                <button
+                  className="btn btn-warning"
+                  onClick={onUnarchiveSelected}
                   disabled={selectedRepos.size === 0}
                   title={selectedRepos.size === 0 ? 'Select repositories to unarchive' : 'Unarchive selected repositories'}
                 >
                   Unarchive Selected
                 </button>
-                <button 
-                  className="btn btn-danger" 
+                <button
+                  className="btn btn-danger"
                   onClick={() => setShowDeleteSelectedConfirmation(true)}
                   disabled={selectedRepos.size === 0}
                   title={selectedRepos.size === 0 ? 'Select repositories to delete' : 'Delete selected repositories'}
@@ -2056,14 +415,14 @@ export default function App() {
                         <button
                           className={`btn btn-sm ${getMigrationButtonClass(repo.state)}`}
                           onClick={() => handleMigrationButtonClick(repo)}
-                          disabled={!canStartMigration(repo)}
+                          disabled={!canStartMigration(repo, isGHESMode)}
                         >
                           {getMigrationButtonText(repo.state)}
                         </button>
                       </>
                     ) : (
                       <button
-                        className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState)}`}
+                        className={`btn btn-sm ${getStatusButtonClass(repo.state, exportState, isGHESMode)}`}
                         onClick={() => {
                           if (canClickStatus) {
                             setInfoRepo(repo);
@@ -2073,32 +432,13 @@ export default function App() {
                         }}
                         disabled={isArchived && !canClickStatus}
                       >
-                        {getStatusButtonText(repo.state, exportState)}
+                        {getStatusButtonText(repo.state, exportState, isGHESMode)}
                       </button>
                     )}
                     <button
                       className="btn btn-danger btn-sm"
                       onClick={() => setResetRepo(repo)}
-                      disabled={
-                        isArchived ||
-                        (!isGHESMode && (repo.state === 'reset' || repo.state === 'pending')) ||
-                        (isGHESMode && (
-                          (repo.state === 'reset' && (
-                            !repo.gitSourceExportState ||
-                            !repo.metadataExportState ||
-                            repo.gitSourceExportState !== 'exported' ||
-                            repo.metadataExportState !== 'exported'
-                          )) ||
-                          (repo.state === 'pending' && (
-                            !repo.gitSourceExportState ||
-                            !repo.metadataExportState ||
-                            repo.gitSourceExportState === 'pending' ||
-                            repo.metadataExportState === 'pending' ||
-                            repo.gitSourceExportState === 'exporting' ||
-                            repo.metadataExportState === 'exporting'
-                          ))
-                        ))
-                      }
+                      disabled={!canResetRepository(repo, isGHESMode)}
                       title={isArchived ? 'Reset is not available for archived repositories' : 'Reset this repository'}
                       aria-label={isArchived ? 'Reset is not available for archived repositories' : 'Reset this repository'}
                     >
@@ -2237,9 +577,9 @@ export default function App() {
       {showBulkSettingsModal && (
         <BulkSettingsModal
           onClose={() => setShowBulkSettingsModal(false)}
-          onSave={handleBulkSettingsUpdate}
+          onSave={onBulkSettingsUpdate}
           selectedCount={selectedRepos.size}
-          onArchiveSelected={handleArchiveSelected}
+          onArchiveSelected={onArchiveSelected}
           isArchiveView={showArchiveView}
           onShowDeleteConfirmation={() => setShowDeleteSelectedConfirmation(true)}
           selectedRepositories={repositories.filter(r => selectedRepos.has(r.id))}
@@ -2249,22 +589,22 @@ export default function App() {
       {resetRepo && (
         <ResetConfirmationModal
           onClose={() => setResetRepo(null)}
-          onConfirm={async (resetExport) => {
-            await resetRepository(resetRepo, resetExport);
+          onConfirm={async (resetExportFlag) => {
+            await resetRepository(resetRepo, resetExportFlag);
           }}
           repositoryCount={1}
           hasLockedRepos={resetRepo.lockSource || false}
           isGHESMode={isGHESMode}
           exportCompleted={
-            isGHESMode && 
-            resetRepo.gitSourceExportState === 'exported' && 
+            isGHESMode &&
+            resetRepo.gitSourceExportState === 'exported' &&
             resetRepo.metadataExportState === 'exported'
           }
           migrationStarted={
-            isGHESMode && 
-            resetRepo.state !== 'pending' && 
+            isGHESMode &&
+            resetRepo.state !== 'pending' &&
             resetRepo.state !== 'reset' &&
-            resetRepo.state !== null
+            resetRepo.state !== undefined
           }
         />
       )}
@@ -2272,34 +612,20 @@ export default function App() {
       {showBulkResetConfirmation && (() => {
         const selectedResetRepos = repositories.filter(r => {
           if (!selectedRepos.has(r.id)) return false;
-          
-          // In GH mode: exclude 'pending' and 'reset' states
-          if (!isGHESMode) {
-            return r.state !== 'pending' && r.state !== 'reset';
-          }
-          
-          // In GHES mode: allow reset if exports are completed, even if state is 'pending' or 'reset'
-          if (r.state === 'pending' || r.state === 'reset') {
-            const exportsCompleted = r.gitSourceExportState === 'exported' && 
-                                     r.metadataExportState === 'exported';
-            return exportsCompleted;
-          }
-          
-          // For other states in GHES mode, allow reset
-          return true;
+          return canResetRepository(r, isGHESMode);
         });
-        
-        const allExportsCompleted = selectedResetRepos.every(r => 
+
+        const allExportsCompleted = selectedResetRepos.every(r =>
           r.gitSourceExportState === 'exported' && r.metadataExportState === 'exported'
         );
-        const anyMigrationStarted = selectedResetRepos.some(r => 
-          r.state !== 'pending' && r.state !== 'reset' && r.state !== null
+        const anyMigrationStarted = selectedResetRepos.some(r =>
+          r.state !== 'pending' && r.state !== 'reset' && r.state !== undefined
         );
-        
+
         return (
           <ResetConfirmationModal
             onClose={() => setShowBulkResetConfirmation(false)}
-            onConfirm={handleResetSelected}
+            onConfirm={onResetSelected}
             repositoryCount={selectedResetRepos.length}
             hasLockedRepos={selectedResetRepos.some(r => r.lockSource)}
             isGHESMode={isGHESMode}
@@ -2312,14 +638,14 @@ export default function App() {
       {showScanOrgModal && (
         <ScanOrgModal
           onClose={() => setShowScanOrgModal(false)}
-          onScan={handleScanOrg}
+          onScan={onScanOrg}
         />
       )}
 
       {showDeleteSelectedConfirmation && (
         <DeleteSelectedConfirmationModal
           onClose={() => setShowDeleteSelectedConfirmation(false)}
-          onConfirm={handleDeleteSelected}
+          onConfirm={onDeleteSelected}
           repositoryCount={repositories.filter(r => selectedRepos.has(r.id)).length}
         />
       )}
@@ -2336,4 +662,3 @@ export default function App() {
     </div>
   );
 }
-

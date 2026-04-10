@@ -12,45 +12,51 @@ import {
   StartMigrationDto,
   UnlockSourceRepoDto,
 } from './github.dto';
-import { GitHubService } from './github.service';
+import { MigrationService } from './migration.service';
+import { ExportService } from './export.service';
+import { SourceRepositoryService } from './source-repository.service';
 
 @Controller('github')
 export class GitHubController {
-  constructor(private readonly githubService: GitHubService) {}
+  constructor(
+    private readonly migrationService: MigrationService,
+    private readonly exportService: ExportService,
+    private readonly sourceRepositoryService: SourceRepositoryService,
+  ) {}
 
   @Get('owner')
   getOwnerId() {
-    return this.githubService.getOwnerId();
+    return this.migrationService.getOwnerId();
   }
 
   @Post('migrations')
   startMigration(@Body() payload: StartMigrationDto) {
-    return this.githubService.startMigration(payload);
+    return this.migrationService.startMigration(payload);
   }
 
   @Get('migrations/:migrationId')
   getMigrationStatus(@Param('migrationId') migrationId: string) {
-    return this.githubService.getMigrationStatus(migrationId);
+    return this.migrationService.getMigrationStatus(migrationId);
   }
 
   @Delete('target-repositories/:repositoryName')
   deleteTargetRepository(@Param('repositoryName') repositoryName: string) {
-    return this.githubService.deleteTargetRepository(repositoryName);
+    return this.migrationService.deleteTargetRepository(repositoryName);
   }
 
   @Post('source-repositories/unlock')
   unlockSourceRepository(@Body() payload: UnlockSourceRepoDto) {
-    return this.githubService.unlockSourceRepository(payload);
+    return this.sourceRepositoryService.unlockSourceRepository(payload);
   }
 
   @Post('source-organizations/scan')
   scanSourceOrganization(@Body() payload: ScanSourceOrgDto) {
-    return this.githubService.scanSourceOrganization(payload);
+    return this.sourceRepositoryService.scanSourceOrganization(payload);
   }
 
   @Post('exports')
   startExport(@Body() payload: StartExportDto) {
-    return this.githubService.startExport(payload);
+    return this.exportService.startExport(payload);
   }
 
   @Get('exports/:organizationName/:exportId')
@@ -58,6 +64,6 @@ export class GitHubController {
     @Param('organizationName') organizationName: string,
     @Param('exportId') exportId: string,
   ) {
-    return this.githubService.getExportStatus(organizationName, exportId);
+    return this.exportService.getExportStatus(organizationName, exportId);
   }
 }

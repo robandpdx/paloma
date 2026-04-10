@@ -1,4 +1,8 @@
-## GitHub Repository Migration UI
+## Paloma: GitHub Repository Migration UI
+
+<p align="center">
+  <img src="docs/paloma-logo.png" alt="Paloma logo" width="200" />
+</p>
 
 This application provides a complete solution for managing GitHub repository migrations using the [GitHub Enterprise Importer](https://docs.github.com/en/migrations/using-github-enterprise-importer). It runs as two Docker containers (frontend + backend) backed by MongoDB.
 
