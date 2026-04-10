@@ -14,7 +14,9 @@
     "start:backend": "npm --prefix backend run start",
     "compose:up": "docker compose up --build",
     "compose:down": "docker compose down -v",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest",
+    "test:backend": "npm --prefix backend test"
   },
   "dependencies": {
     "next": "14.2.32",
@@ -22,11 +24,15 @@
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@types/jest": "^29",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "8.57.1",
     "eslint-config-next": "15.5.5",
+    "jest": "^29",
+    "jest-junit": "^16.0.0",
+    "ts-jest": "^29",
     "tsx": "^4.19.0",
     "typescript": "^5.6.2"
   }

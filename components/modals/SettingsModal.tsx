@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { RepositoryMigration } from "@/lib/api";
+import type { RepositoryMigration, RepoVisibility } from "@/lib/api";
 import DeleteModal from "./DeleteModal";
 
 export interface SettingsModalProps {
@@ -34,7 +34,7 @@ export default function SettingsModal({ repository, onClose, onUpdate, onDelete,
     setTimeout(() => setShowSaveConfirmation(false), 2000);
   };
 
-  const handleVisibilityChange = async (visibility: string) => {
+  const handleVisibilityChange = async (visibility: RepoVisibility) => {
     setRepositoryVisibility(visibility);
     await onUpdate(lockSource, visibility);
     setShowSaveConfirmation(true);
@@ -74,7 +74,7 @@ export default function SettingsModal({ repository, onClose, onUpdate, onDelete,
             <select
               className="form-input"
               value={repositoryVisibility}
-              onChange={(e) => handleVisibilityChange(e.target.value)}
+              onChange={(e) => handleVisibilityChange(e.target.value as RepoVisibility)}
               disabled={!isSettingsEditable}
             >
               <option value="private">Private</option>

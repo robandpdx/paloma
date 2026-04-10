@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { EnvironmentService } from '../config/environment.service';
 import { GitHubController } from './github.controller';
-import { GitHubService } from './github.service';
+import { MigrationService } from './migration.service';
+import { ExportService } from './export.service';
+import { SourceRepositoryService } from './source-repository.service';
 
 @Module({
   controllers: [GitHubController],
-  providers: [GitHubService, EnvironmentService],
-  exports: [GitHubService],
+  providers: [MigrationService, ExportService, SourceRepositoryService, EnvironmentService],
+  exports: [MigrationService, ExportService, SourceRepositoryService],
 })
 export class GitHubModule {}

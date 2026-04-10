@@ -1,3 +1,27 @@
+export const MIGRATION_STATES = [
+  'pending',
+  'queued',
+  'in_progress',
+  'completed',
+  'failed',
+  'reset',
+] as const;
+
+export type MigrationState = (typeof MIGRATION_STATES)[number];
+
+export const EXPORT_STATES = [
+  'pending',
+  'exporting',
+  'exported',
+  'failed',
+] as const;
+
+export type ExportState = (typeof EXPORT_STATES)[number];
+
+export const REPO_VISIBILITIES = ['private', 'public', 'internal'] as const;
+
+export type RepoVisibility = (typeof REPO_VISIBILITIES)[number];
+
 export interface RepositoryMigration {
   id: string;
   repositoryName: string;
@@ -5,15 +29,15 @@ export interface RepositoryMigration {
   destinationOwnerId?: string;
   migrationSourceId?: string;
   repositoryMigrationId?: string;
-  state?: string;
+  state?: MigrationState;
   failureReason?: string;
   lockSource?: boolean;
-  repositoryVisibility?: "private" | "public" | "internal" | string;
+  repositoryVisibility?: RepoVisibility;
   archived?: boolean;
   gitSourceExportId?: string;
   metadataExportId?: string;
-  gitSourceExportState?: string;
-  metadataExportState?: string;
+  gitSourceExportState?: ExportState;
+  metadataExportState?: ExportState;
   gitSourceArchiveUrl?: string;
   metadataArchiveUrl?: string;
   exportFailureReason?: string;
