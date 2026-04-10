@@ -7,7 +7,7 @@ import DeleteModal from "./DeleteModal";
 export interface SettingsModalProps {
   repository: RepositoryMigration;
   onClose: () => void;
-  onUpdate: (lockSource: boolean, repositoryVisibility: string) => void;
+  onUpdate: (lockSource: boolean, repositoryVisibility: RepoVisibility) => void;
   onDelete: () => void;
   onArchive?: () => void;
   onUnarchive?: () => void;

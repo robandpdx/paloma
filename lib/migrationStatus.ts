@@ -185,15 +185,18 @@ export function canResetRepository(repo: RepositoryMigration, isGHESMode: boolea
   if (repo.archived) return false;
 
   if (!isGHESMode) {
-    return repo.state !== 'pending' && repo.state !== 'reset';
+    return !!repo.state && repo.state !== 'pending' && repo.state !== 'reset';
   }
 
-  if (repo.state === 'reset') {
+  // Treat undefined/null state the same as 'pending' for GHES
+  const state = repo.state ?? 'pending';
+
+  if (state === 'reset') {
     return repo.gitSourceExportState === 'exported' &&
       repo.metadataExportState === 'exported';
   }
 
-  if (repo.state === 'pending') {
+  if (state === 'pending') {
     const exportsCompleted = repo.gitSourceExportState === 'exported' &&
       repo.metadataExportState === 'exported';
     const exportsInProgress =

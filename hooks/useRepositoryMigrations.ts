@@ -6,6 +6,7 @@ import {
   getRuntimeConfig,
   type RepositoryMigration,
   type RuntimeConfig,
+  type RepoVisibility,
 } from "@/lib/api";
 import { parseCSV } from "@/lib/csvParser";
 
@@ -17,6 +18,7 @@ export function useRepositoryMigrations() {
   const pollingExportsRef = useRef<Set<string>>(new Set());
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const targetOrganization = runtimeConfig?.targetOrganization || 'Not configured';
   const targetDescription = runtimeConfig?.targetDescription || 'Not configured';
@@ -26,7 +28,21 @@ export function useRepositoryMigrations() {
 
   const showError = useCallback((message: string) => {
     setErrorMessage(message);
-    setTimeout(() => setErrorMessage(null), 5000);
+    if (errorTimerRef.current !== null) {
+      clearTimeout(errorTimerRef.current);
+    }
+    errorTimerRef.current = setTimeout(() => {
+      setErrorMessage(null);
+      errorTimerRef.current = null;
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (errorTimerRef.current !== null) {
+        clearTimeout(errorTimerRef.current);
+      }
+    };
   }, []);
 
   const dismissError = useCallback(() => {
@@ -163,11 +179,11 @@ export function useRepositoryMigrations() {
     }
   }, [syncRepository, showError]);
 
-  const updateRepositorySettings = useCallback(async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: string) => {
+  const updateRepositorySettings = useCallback(async (repo: RepositoryMigration, lockSource: boolean, repositoryVisibility: RepoVisibility) => {
     try {
       const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, {
         lockSource,
-        repositoryVisibility: repositoryVisibility as 'private' | 'public' | 'internal',
+        repositoryVisibility,
       });
       syncRepository(updatedRepository);
     } catch (error) {
@@ -291,13 +307,17 @@ export function useRepositoryMigrations() {
         syncRepository(failedRepository);
       }
     } catch (error) {
-      const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-        state: 'failed',
-        failureReason: error instanceof Error ? error.message : 'Unknown error',
-      });
-      syncRepository(failedRepository);
+      try {
+        const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
+          state: 'failed',
+          failureReason: error instanceof Error ? error.message : 'Unknown error',
+        });
+        syncRepository(failedRepository);
+      } catch (updateError) {
+        showError(`Failed to record migration failure: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`);
+      }
     }
-  }, [isGHESMode, syncRepository, startPolling]);
+  }, [isGHESMode, syncRepository, startPolling, showError]);
 
   const startExport = useCallback(async (repo: RepositoryMigration) => {
     try {
@@ -338,14 +358,18 @@ export function useRepositoryMigrations() {
         syncRepository(failedRepository);
       }
     } catch (error) {
-      const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
-        gitSourceExportState: 'failed',
-        metadataExportState: 'failed',
-        exportFailureReason: error instanceof Error ? error.message : 'Unknown error',
-      });
-      syncRepository(failedRepository);
+      try {
+        const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
+          gitSourceExportState: 'failed',
+          metadataExportState: 'failed',
+          exportFailureReason: error instanceof Error ? error.message : 'Unknown error',
+        });
+        syncRepository(failedRepository);
+      } catch (updateError) {
+        showError(`Failed to record export failure: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`);
+      }
     }
-  }, [syncRepository, startExportPolling]);
+  }, [syncRepository, startExportPolling, showError]);
 
   // --- Polling ---
 
@@ -470,7 +494,7 @@ export function useRepositoryMigrations() {
     }
   }, [repositories, isGHESMode, resetRepository, showError]);
 
-  const handleBulkSettingsUpdate = useCallback(async (selectedRepos: Set<string>, lockSource: boolean, repositoryVisibility: string) => {
+  const handleBulkSettingsUpdate = useCallback(async (selectedRepos: Set<string>, lockSource: boolean, repositoryVisibility: RepoVisibility) => {
     const selectedRepoObjects = repositories.filter(r =>
       selectedRepos.has(r.id) && (r.state === 'pending' || r.state === 'reset')
     );

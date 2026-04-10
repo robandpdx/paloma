@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { RepositoryMigration } from "@/lib/api";
+import type { RepositoryMigration, RepoVisibility } from "@/lib/api";
 
 export interface BulkSettingsModalProps {
   onClose: () => void;
-  onSave: (lockSource: boolean, repositoryVisibility: string) => void;
+  onSave: (lockSource: boolean, repositoryVisibility: RepoVisibility) => void;
   selectedCount: number;
   onArchiveSelected: () => void;
   isArchiveView: boolean;
@@ -15,7 +15,7 @@ export interface BulkSettingsModalProps {
 
 export default function BulkSettingsModal({ onClose, onSave, selectedCount, onArchiveSelected, isArchiveView, onShowDeleteConfirmation, selectedRepositories }: BulkSettingsModalProps) {
   const [lockSource, setLockSource] = useState(false);
-  const [repositoryVisibility, setRepositoryVisibility] = useState("private");
+  const [repositoryVisibility, setRepositoryVisibility] = useState<RepoVisibility>("private");
 
   const hasNonEditableRepos = selectedRepositories.some(
     repo => repo.state !== 'pending' && repo.state !== 'reset'
@@ -53,7 +53,7 @@ export default function BulkSettingsModal({ onClose, onSave, selectedCount, onAr
             <select
               className="form-input"
               value={repositoryVisibility}
-              onChange={(e) => setRepositoryVisibility(e.target.value)}
+              onChange={(e) => setRepositoryVisibility(e.target.value as RepoVisibility)}
               disabled={!isSettingsEditable}
             >
               <option value="private">Private</option>

@@ -118,6 +118,9 @@ describe('canResetRepository', () => {
   it('returns false for pending repos in GH mode', () => {
     expect(canResetRepository(makeRepo({ state: 'pending' }), false)).toBe(false);
   });
+  it('returns false for repos with undefined state in GH mode', () => {
+    expect(canResetRepository(makeRepo({ state: undefined }), false)).toBe(false);
+  });
   it('returns true for completed repos in GH mode', () => {
     expect(canResetRepository(makeRepo({ state: 'completed' }), false)).toBe(true);
   });
@@ -134,6 +137,13 @@ describe('canResetRepository', () => {
   it('returns false in GHES when exports not completed and state is pending', () => {
     expect(canResetRepository(makeRepo({
       state: 'pending',
+      gitSourceExportState: 'pending',
+      metadataExportState: 'pending',
+    }), true)).toBe(false);
+  });
+  it('returns false in GHES when state is undefined and exports not completed', () => {
+    expect(canResetRepository(makeRepo({
+      state: undefined,
       gitSourceExportState: 'pending',
       metadataExportState: 'pending',
     }), true)).toBe(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { RepositoryMigration } from "@/lib/api";
+import type { RepositoryMigration, RepoVisibility } from "@/lib/api";
 import { useRepositoryMigrations } from "@/hooks/useRepositoryMigrations";
 import {
   getMigrationButtonClass,
@@ -163,7 +163,7 @@ export default function App() {
     await handleResetSelected(selectedRepos, resetExport);
   };
 
-  const onBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: string) => {
+  const onBulkSettingsUpdate = async (lockSource: boolean, repositoryVisibility: RepoVisibility) => {
     await handleBulkSettingsUpdate(selectedRepos, lockSource, repositoryVisibility);
   };
 

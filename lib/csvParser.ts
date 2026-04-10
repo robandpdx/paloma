@@ -1,4 +1,5 @@
 import type { RepoVisibility } from "@/lib/api";
+import { REPO_VISIBILITIES } from "@/lib/api";
 
 export interface ParsedCSVRow {
   sourceRepoUrl: string;
@@ -23,7 +24,10 @@ export function parseCSV(text: string): ParsedCSVRow[] {
     if (!repoName) continue;
 
     const lockSource = lockSourceStr?.toLowerCase() === 'true';
-    const visibility = (repoVisibility || 'private') as RepoVisibility;
+    const normalizedVisibility = repoVisibility?.toLowerCase();
+    const visibility: RepoVisibility = (REPO_VISIBILITIES as readonly string[]).includes(normalizedVisibility)
+      ? (normalizedVisibility as RepoVisibility)
+      : 'private';
 
     results.push({
       sourceRepoUrl,

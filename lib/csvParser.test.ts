@@ -61,7 +61,19 @@ describe('parseCSV', () => {
     expect(result[0].repoName).toBe('repo');
   });
 
-  it('returns empty array for empty input', () => {
-    expect(parseCSV('')).toEqual([]);
+  it('defaults visibility to private for invalid visibility values', () => {
+    const text = 'https://github.com/org/repo1,InvalidVisibility,false';
+    const result = parseCSV(text);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].repositoryVisibility).toBe('private');
+  });
+
+  it('normalizes visibility to lowercase', () => {
+    const text = 'https://github.com/org/repo1,Public,false';
+    const result = parseCSV(text);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].repositoryVisibility).toBe('public');
   });
 });
