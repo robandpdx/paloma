@@ -41,7 +41,9 @@ export function useRepositoryMigrations() {
     return () => {
       if (errorTimerRef.current !== null) {
         clearTimeout(errorTimerRef.current);
+        errorTimerRef.current = null;
       }
+      setErrorMessage(null);
     };
   }, []);
 

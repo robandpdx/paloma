@@ -8,6 +8,10 @@ export interface ParsedCSVRow {
   lockSource: boolean;
 }
 
+function isRepoVisibility(value: string): value is RepoVisibility {
+  return REPO_VISIBILITIES.includes(value as RepoVisibility);
+}
+
 export function parseCSV(text: string): ParsedCSVRow[] {
   const lines = text.split('\n').filter(line => line.trim());
   if (lines.length === 0) return [];
@@ -24,10 +28,8 @@ export function parseCSV(text: string): ParsedCSVRow[] {
     if (!repoName) continue;
 
     const lockSource = lockSourceStr?.toLowerCase() === 'true';
-    const normalizedVisibility = repoVisibility?.toLowerCase();
-    const visibility: RepoVisibility = (REPO_VISIBILITIES as readonly string[]).includes(normalizedVisibility)
-      ? (normalizedVisibility as RepoVisibility)
-      : 'private';
+    const normalizedVisibility = repoVisibility?.toLowerCase() ?? '';
+    const visibility: RepoVisibility = isRepoVisibility(normalizedVisibility) ? normalizedVisibility : 'private';
 
     results.push({
       sourceRepoUrl,
