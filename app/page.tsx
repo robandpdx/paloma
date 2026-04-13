@@ -401,7 +401,23 @@ export default function App() {
                   </div>
                   <div className="repository-info">
                     <div className="repository-name">{repo.repositoryName}</div>
-                    <div className="repository-url">{repo.sourceRepositoryUrl}</div>
+                    <div className="repository-url">
+                      {repo.sourceRepositoryUrl}
+                      <span className="repository-meta">
+                        <span className="repository-visibility" title={`Visibility: ${repo.repositoryVisibility || 'private'}`}>
+                          {(repo.repositoryVisibility || 'private').charAt(0).toUpperCase() + (repo.repositoryVisibility || 'private').slice(1)}
+                        </span>
+                        {repo.lockSource && (
+                          <span
+                            className="repository-lock"
+                            title="Source repository will be locked"
+                            aria-label="Locked"
+                          >
+                            🔒
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </div>
                   <div className="repository-actions">
                     {isGHESMode && !isArchived ? (

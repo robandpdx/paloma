@@ -126,9 +126,32 @@ body {
 .repository-url {
   font-size: 12px;
   color: var(--color-fg-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.repository-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.repository-visibility {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-fg-muted);
+  background-color: var(--color-canvas-subtle);
   white-space: nowrap;
+}
+
+.repository-lock {
+  font-size: 12px;
+  cursor: default;
 }
 
 .repository-actions {
