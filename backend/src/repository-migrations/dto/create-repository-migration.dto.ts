@@ -81,4 +81,9 @@ export class CreateRepositoryMigrationDto {
   @IsOptional()
   @IsString()
   exportFailureReason?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isPolling?: boolean;
 }

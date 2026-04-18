@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   apiClient,
   getRuntimeConfig,
@@ -9,13 +9,10 @@ import {
   type RepoVisibility,
 } from "@/lib/api";
 import { parseCSV } from "@/lib/csvParser";
+import { useWebSocket } from "./useWebSocket";
 
 export function useRepositoryMigrations() {
   const [repositories, setRepositories] = useState<RepositoryMigration[]>([]);
-  const [pollingRepos, setPollingRepos] = useState<Set<string>>(new Set());
-  const pollingReposRef = useRef<Set<string>>(new Set());
-  const [pollingExports, setPollingExports] = useState<Set<string>>(new Set());
-  const pollingExportsRef = useRef<Set<string>>(new Set());
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,22 +81,72 @@ export function useRepositoryMigrations() {
     }
   }, [showError]);
 
-  // Keep refs in sync with state
+  // WebSocket callbacks for real-time updates
+  const webSocketCallbacks = useMemo(() => ({
+    onMigrationUpdate: (update: any) => {
+      console.log('Processing migration update:', update);
+      setRepositories((currentRepositories) => {
+        return currentRepositories.map((repo) => {
+          if (repo.id === update.repoId) {
+            console.log(`Updating repo ${repo.repositoryName} state from ${repo.state} to ${update.state}`);
+            return { 
+              ...repo, 
+              state: update.state as any, 
+              failureReason: update.failureReason || '' 
+            };
+          }
+          return repo;
+        });
+      });
+    },
+
+    onExportUpdate: (update: any) => {
+      console.log('Processing export update:', update);
+      setRepositories((currentRepositories) => {
+        return currentRepositories.map((repo) => {
+          if (repo.id === update.repoId) {
+            console.log(`Updating export states for repo ${repo.repositoryName}`);
+            return {
+              ...repo,
+              gitSourceExportState: update.gitSourceExportState as any || repo.gitSourceExportState,
+              metadataExportState: update.metadataExportState as any || repo.metadataExportState,
+              gitSourceArchiveUrl: update.gitSourceArchiveUrl || repo.gitSourceArchiveUrl,
+              metadataArchiveUrl: update.metadataArchiveUrl || repo.metadataArchiveUrl,
+            };
+          }
+          return repo;
+        });
+      });
+    },
+
+    onRepositoryUpdate: (update: any) => {
+      console.log('Processing repository update:', update);
+      syncRepository(update.repository);
+    },
+  }), [syncRepository]);
+
+  // Initialize WebSocket connection with callbacks
+  const webSocket = useWebSocket(webSocketCallbacks);
+
+  // Subscribe to active migrations and exports when repositories change
   useEffect(() => {
-    pollingReposRef.current = pollingRepos;
-  }, [pollingRepos]);
+    repositories.forEach(repo => {
+      // Subscribe to migration updates for active migrations
+      if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId) {
+        webSocket.subscribeToMigration(repo.repositoryMigrationId);
+      }
 
-  useEffect(() => {
-    pollingExportsRef.current = pollingExports;
-  }, [pollingExports]);
+      // Subscribe to export updates for active exports (GHES mode)
+      if (isGHESMode) {
+        const gitSourceInProgress = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
+        const metadataInProgress = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
 
-  const startPolling = useCallback((repoId: string) => {
-    setPollingRepos(prev => new Set(prev).add(repoId));
-  }, []);
-
-  const startExportPolling = useCallback((repoId: string) => {
-    setPollingExports(prev => new Set(prev).add(repoId));
-  }, []);
+        if (gitSourceInProgress || metadataInProgress) {
+          webSocket.subscribeToExport(repo.id);
+        }
+      }
+    });
+  }, [repositories, webSocket, isGHESMode]);
 
   // Load runtime config
   useEffect(() => {
@@ -114,27 +161,6 @@ export function useRepositoryMigrations() {
   useEffect(() => {
     void refreshRepositories();
   }, [refreshRepositories]);
-
-  // Resume polling for in-progress repos
-  useEffect(() => {
-    repositories.forEach(repo => {
-      if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId && !pollingReposRef.current.has(repo.id)) {
-        startPolling(repo.id);
-      }
-
-      if (isGHESMode && repo.gitSourceExportId && repo.metadataExportId && !pollingExportsRef.current.has(repo.id)) {
-        const gitSourceInProgress = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
-        const metadataInProgress = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
-
-        if (gitSourceInProgress || metadataInProgress) {
-          const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
-          if (match) {
-            startExportPolling(repo.id);
-          }
-        }
-      }
-    });
-  }, [repositories, startPolling, startExportPolling, isGHESMode]);
 
   // --- CRUD operations ---
 
@@ -238,8 +264,12 @@ export function useRepositoryMigrations() {
 
       const updatedRepository = await apiClient.updateRepositoryMigration(repo.id, updateFields);
       syncRepository(updatedRepository);
-      setPollingRepos(prev => { const next = new Set(prev); next.delete(repo.id); return next; });
-      setPollingExports(prev => { const next = new Set(prev); next.delete(repo.id); return next; });
+      
+      // Unsubscribe from WebSocket updates
+      if (repo.repositoryMigrationId) {
+        webSocket.unsubscribeFromMigration(repo.repositoryMigrationId);
+      }
+      webSocket.unsubscribeFromExport(repo.id);
     } catch (error) {
       showError(`Failed to reset repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
       const shouldUnlock = isGHESMode ? resetExport : true;
@@ -267,7 +297,7 @@ export function useRepositoryMigrations() {
         syncRepository(updatedRepository);
       } catch { /* swallow secondary error */ }
     }
-  }, [isGHESMode, syncRepository, showError]);
+  }, [isGHESMode, syncRepository, webSocket, showError]);
 
   const startMigration = useCallback(async (repo: RepositoryMigration) => {
     try {
@@ -300,7 +330,9 @@ export function useRepositoryMigrations() {
           failureReason: '',
         });
         syncRepository(updatedRepository);
-        startPolling(repo.id);
+        
+        // Subscribe to WebSocket updates for this migration
+        webSocket.subscribeToMigration(result.migrationId);
       } else {
         const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
           state: 'failed',
@@ -319,7 +351,7 @@ export function useRepositoryMigrations() {
         showError(`Failed to record migration failure: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`);
       }
     }
-  }, [isGHESMode, syncRepository, startPolling, showError]);
+  }, [isGHESMode, syncRepository, webSocket, showError]);
 
   const startExport = useCallback(async (repo: RepositoryMigration) => {
     try {
@@ -350,7 +382,9 @@ export function useRepositoryMigrations() {
           exportFailureReason: '',
         });
         syncRepository(updatedRepository);
-        startExportPolling(repo.id);
+        
+        // Subscribe to WebSocket updates for this export
+        webSocket.subscribeToExport(repo.id);
       } else {
         const failedRepository = await apiClient.updateRepositoryMigration(repo.id, {
           gitSourceExportState: 'failed',
@@ -371,87 +405,7 @@ export function useRepositoryMigrations() {
         showError(`Failed to record export failure: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`);
       }
     }
-  }, [syncRepository, startExportPolling, showError]);
-
-  // --- Polling ---
-
-  const checkMigrationStatus = useCallback(async (repoId: string, migrationId: string) => {
-    try {
-      const response = await apiClient.checkMigrationStatus(migrationId);
-      if (response.success) {
-        const state = response.state.toLowerCase();
-        const normalizedState = state === 'succeeded' ? 'completed' : state;
-        const updatedRepository = await apiClient.updateRepositoryMigration(repoId, {
-          state: normalizedState as 'pending' | 'queued' | 'in_progress' | 'completed' | 'failed' | 'reset',
-          failureReason: response.failureReason || '',
-        });
-        syncRepository(updatedRepository);
-
-        if (state === 'failed' || state === 'succeeded' || state === 'completed') {
-          setPollingRepos(prev => { const next = new Set(prev); next.delete(repoId); return next; });
-        }
-      }
-    } catch (error) {
-      console.error('Error checking migration status:', error);
-    }
-  }, [syncRepository]);
-
-  const checkExportStatus = useCallback(async (repoId: string, organizationName: string, gitSourceExportId: string, metadataExportId: string) => {
-    try {
-      const [gitSourceResponse, metadataResponse] = await Promise.all([
-        apiClient.checkExportStatus(organizationName, gitSourceExportId),
-        apiClient.checkExportStatus(organizationName, metadataExportId),
-      ]);
-
-      if (gitSourceResponse.success && metadataResponse.success) {
-        const updatedRepository = await apiClient.updateRepositoryMigration(repoId, {
-          gitSourceExportState: gitSourceResponse.state as 'pending' | 'exporting' | 'exported' | 'failed',
-          metadataExportState: metadataResponse.state as 'pending' | 'exporting' | 'exported' | 'failed',
-          gitSourceArchiveUrl: gitSourceResponse.archiveUrl || '',
-          metadataArchiveUrl: metadataResponse.archiveUrl || '',
-        });
-        syncRepository(updatedRepository);
-
-        const gitSourceComplete = gitSourceResponse.state === 'exported' || gitSourceResponse.state === 'failed';
-        const metadataComplete = metadataResponse.state === 'exported' || metadataResponse.state === 'failed';
-
-        if (gitSourceComplete && metadataComplete) {
-          setPollingExports(prev => { const next = new Set(prev); next.delete(repoId); return next; });
-        }
-      }
-    } catch (error) {
-      console.error('Error checking export status:', error);
-    }
-  }, [syncRepository]);
-
-  // Migration polling
-  useEffect(() => {
-    if (pollingRepos.size === 0) return;
-    const interval = setInterval(() => {
-      repositories.forEach(repo => {
-        if (pollingRepos.has(repo.id) && repo.repositoryMigrationId) {
-          checkMigrationStatus(repo.id, repo.repositoryMigrationId);
-        }
-      });
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [pollingRepos, repositories, checkMigrationStatus]);
-
-  // Export polling
-  useEffect(() => {
-    if (pollingExports.size === 0 || !isGHESMode) return;
-    const interval = setInterval(() => {
-      repositories.forEach(repo => {
-        if (pollingExports.has(repo.id) && repo.gitSourceExportId && repo.metadataExportId) {
-          const match = repo.sourceRepositoryUrl.match(/\/([^\/]+)\/[^\/]+$/);
-          if (match) {
-            checkExportStatus(repo.id, match[1], repo.gitSourceExportId, repo.metadataExportId);
-          }
-        }
-      });
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [pollingExports, repositories, checkExportStatus, isGHESMode]);
+  }, [syncRepository, webSocket, showError]);
 
   // --- Bulk operations (using Promise.allSettled) ---
 
@@ -624,6 +578,7 @@ export function useRepositoryMigrations() {
     isGHESMode,
     errorMessage,
     dismissError,
+    isWebSocketConnected: webSocket.isConnected,
 
     addRepository,
     deleteRepository,

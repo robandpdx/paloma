@@ -1,12 +1,12 @@
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { EnvironmentService } from './config/environment.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const environment = app.get(EnvironmentService);
+  const configService = app.get(ConfigService);
 
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -18,7 +18,7 @@ async function bootstrap() {
     }),
   );
 
-  const corsOrigin = environment.corsOrigin;
+  const corsOrigin = configService.get('corsOrigin') || [];
   if (corsOrigin.length === 0) {
     console.warn('WARNING: CORS_ORIGIN is not set. All origins will be allowed. Set CORS_ORIGIN in production.');
   }
@@ -26,7 +26,9 @@ async function bootstrap() {
     origin: corsOrigin.length > 0 ? corsOrigin : true,
   });
 
-  await app.listen(environment.port);
+  const port = configService.get('port') || 5005;
+  await app.listen(port);
+  console.log(`Application is running on: http://localhost:${port}`);
 }
 
 void bootstrap();

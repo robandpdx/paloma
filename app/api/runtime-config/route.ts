@@ -12,7 +12,7 @@ function getRequiredEnv(name: string, fallback?: string): string {
 
 export async function GET() {
   return NextResponse.json({
-    apiBaseUrl: getRequiredEnv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:5005/api"),
+    apiBaseUrl: getRequiredEnv("NEXT_PUBLIC_API_BASE_URL", "http://localhost:5005") + "/api",
     targetOrganization: getRequiredEnv("TARGET_ORGANIZATION", ""),
     targetDescription: getRequiredEnv("TARGET_DESCRIPTION", ""),
     sourceDescription: getRequiredEnv("SOURCE_DESCRIPTION", ""),

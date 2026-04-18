@@ -7,6 +7,7 @@ import { EnvironmentService } from './config/environment.service';
 import { validateEnvironment } from './config/env.validation';
 import { GitHubModule } from './github/github.module';
 import { RepositoryMigrationsModule } from './repository-migrations/repository-migrations.module';
+import { PollingModule } from './polling/polling.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RepositoryMigrationsModule } from './repository-migrations/repository-m
     }),
     GitHubModule,
     RepositoryMigrationsModule,
+    PollingModule,
   ],
   controllers: [AppController],
   providers: [EnvironmentService],

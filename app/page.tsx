@@ -37,6 +37,7 @@ export default function App() {
     isGHESMode,
     errorMessage,
     dismissError,
+    isWebSocketConnected,
 
     addRepository,
     deleteRepository,
@@ -265,6 +266,18 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1 className="app-title">GitHub Repository Migration</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+            <span style={{ 
+              display: 'inline-block', 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              backgroundColor: isWebSocketConnected ? '#28a745' : '#dc3545' 
+            }}></span>
+            <span style={{ fontSize: '12px', color: 'var(--color-fg-muted)' }}>
+              Real-time updates: {isWebSocketConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
         </div>
       </header>
 
