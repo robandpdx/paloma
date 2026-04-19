@@ -58,6 +58,18 @@ export class RepositoryMigrationsService {
     };
   }
 
+  async findBySourceAndName(sourceRepositoryUrl: string, repositoryName: string, includeArchived = false) {
+    const filter = {
+      sourceRepositoryUrl,
+      repositoryName,
+      ...(includeArchived ? {} : { archived: { $ne: true } }),
+    };
+    
+    const document = await this.repositoryMigrationModel.findOne(filter).lean();
+    
+    return document ? this.toResponse(document) : null;
+  }
+
   private toResponse(document: unknown) {
     const typedDocument = document as FlattenMaps<RepositoryMigration> & {
       _id: Types.ObjectId;

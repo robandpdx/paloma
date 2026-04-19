@@ -65,10 +65,10 @@ export class MigrationService extends GitHubBaseService {
     const migrationId = migration.startRepositoryMigration.repositoryMigration.id;
     
     // Try to find existing migration record for this repository
-    const existingMigrations = await this.repositoryMigrationsService.list(true); // Include archived
-    const existingMigration = existingMigrations.find(m => 
-      m.repositoryName === payload.repositoryName && 
-      m.sourceRepositoryUrl === payload.sourceRepositoryUrl
+    const existingMigration = await this.repositoryMigrationsService.findBySourceAndName(
+      payload.sourceRepositoryUrl, 
+      payload.repositoryName, 
+      true // Include archived
     );
 
     let dbRecord;

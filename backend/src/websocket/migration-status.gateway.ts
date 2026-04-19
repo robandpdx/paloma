@@ -7,10 +7,13 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.NODE_ENV === 'production' ? false : ['http://localhost:3000', 'http://localhost:3001'],
+    origin: process.env.CORS_ORIGIN 
+      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean)
+      : true, // Allow all origins when CORS_ORIGIN is not configured (same as HTTP CORS)
     credentials: true,
   },
   namespace: '/migration-status',
@@ -21,6 +24,13 @@ export class MigrationStatusGateway implements OnGatewayConnection, OnGatewayDis
   server!: Server;
 
   private readonly logger = new Logger(MigrationStatusGateway.name);
+
+  constructor(private readonly configService: ConfigService) {
+    const corsOrigin = this.configService.get('corsOrigin') || [];
+    if (corsOrigin.length === 0) {
+      this.logger.warn('WARNING: CORS_ORIGIN is not set for WebSocket. All origins will be allowed. Set CORS_ORIGIN in production.');
+    }
+  }
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);

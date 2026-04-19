@@ -1,25 +1,26 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import io from 'socket.io-client';
 import type { RepositoryMigration } from '@/lib/api';
+import { getRuntimeConfig } from '@/lib/api';
 
 type Socket = ReturnType<typeof io>;
 
-interface MigrationUpdate {
+export interface MigrationUpdate {
   migrationId: string;
-  state: string;
+  state: RepositoryMigration['state'];
   failureReason?: string;
   repoId: string;
 }
 
-interface ExportUpdate {
+export interface ExportUpdate {
   repoId: string;
-  gitSourceExportState?: string;
-  metadataExportState?: string;
+  gitSourceExportState?: RepositoryMigration['gitSourceExportState'];
+  metadataExportState?: RepositoryMigration['metadataExportState'];
   gitSourceArchiveUrl?: string;
   metadataArchiveUrl?: string;
 }
 
-interface RepositoryUpdate {
+export interface RepositoryUpdate {
   repoId: string;
   repository: RepositoryMigration;
 }
@@ -39,60 +40,77 @@ export function useWebSocket(callbacks?: WebSocketCallbacks) {
   callbacksRef.current = callbacks;
 
   useEffect(() => {
-    // Connect directly to the namespace
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5005";
-    const wsUrl = `${baseUrl}/migration-status`;
-    console.log('Connecting to WebSocket at:', wsUrl);
-    
-    const newSocket = io(wsUrl, {
-      forceNew: true,
-      autoConnect: true,
-      transports: ['websocket', 'polling'],
-      timeout: 10000,
-      reconnectionAttempts: 3,
-    });
+    let newSocket: Socket;
 
-    newSocket.on('connect', () => {
-      console.log('WebSocket connected to /migration-status namespace');
-      setIsConnected(true);
-    });
+    // Async function to load config and initialize WebSocket
+    const initializeWebSocket = async () => {
+      try {
+        const config = await getRuntimeConfig();
+        
+        // Strip /api suffix from apiBaseUrl to get WebSocket base URL
+        const wsBaseUrl = config.apiBaseUrl.replace(/\/api$/, '');
+        const wsUrl = `${wsBaseUrl}/migration-status`;
+        
+        console.log('Connecting to WebSocket at:', wsUrl);
+        
+        newSocket = io(wsUrl, {
+          forceNew: true,
+          autoConnect: true,
+          transports: ['websocket', 'polling'],
+          timeout: 10000,
+          reconnectionAttempts: 3,
+        });
 
-    newSocket.on('disconnect', () => {
-      console.log('WebSocket disconnected from /migration-status namespace');
-      setIsConnected(false);
-    });
+        newSocket.on('connect', () => {
+          console.log('WebSocket connected to /migration-status namespace');
+          setIsConnected(true);
+        });
 
-    newSocket.on('connect_error', (error: Error) => {
-      console.error('WebSocket connection error:', error);
-      setIsConnected(false);
-    });
+        newSocket.on('disconnect', () => {
+          console.log('WebSocket disconnected from /migration-status namespace');
+          setIsConnected(false);
+        });
 
-    newSocket.on('migration-update', (update: MigrationUpdate) => {
-      console.log('Received migration update:', update);
-      if (callbacksRef.current?.onMigrationUpdate) {
-        callbacksRef.current.onMigrationUpdate(update);
+        newSocket.on('connect_error', (error: Error) => {
+          console.error('WebSocket connection error:', error);
+          setIsConnected(false);
+        });
+
+        newSocket.on('migration-update', (update: MigrationUpdate) => {
+          console.log('Received migration update:', update);
+          if (callbacksRef.current?.onMigrationUpdate) {
+            callbacksRef.current.onMigrationUpdate(update);
+          }
+        });
+
+        newSocket.on('export-update', (update: ExportUpdate) => {
+          console.log('Received export update:', update);
+          if (callbacksRef.current?.onExportUpdate) {
+            callbacksRef.current.onExportUpdate(update);
+          }
+        });
+
+        newSocket.on('repository-update', (update: RepositoryUpdate) => {
+          console.log('Received repository update:', update);
+          if (callbacksRef.current?.onRepositoryUpdate) {
+            callbacksRef.current.onRepositoryUpdate(update);
+          }
+        });
+
+        setSocket(newSocket);
+      } catch (error) {
+        console.error('Failed to initialize WebSocket:', error);
+        setIsConnected(false);
       }
-    });
+    };
 
-    newSocket.on('export-update', (update: ExportUpdate) => {
-      console.log('Received export update:', update);
-      if (callbacksRef.current?.onExportUpdate) {
-        callbacksRef.current.onExportUpdate(update);
-      }
-    });
-
-    newSocket.on('repository-update', (update: RepositoryUpdate) => {
-      console.log('Received repository update:', update);
-      if (callbacksRef.current?.onRepositoryUpdate) {
-        callbacksRef.current.onRepositoryUpdate(update);
-      }
-    });
-
-    setSocket(newSocket);
+    initializeWebSocket();
 
     return () => {
-      console.log('Cleaning up WebSocket connection');
-      newSocket.close();
+      if (newSocket) {
+        console.log('Cleaning up WebSocket connection');
+        newSocket.close();
+      }
     };
   }, []); // Empty dependency array - only run once
 
@@ -124,11 +142,11 @@ export function useWebSocket(callbacks?: WebSocketCallbacks) {
     }
   }, [socket, isConnected]);
 
-  return {
+  return useMemo(() => ({
     isConnected,
     subscribeToMigration,
     unsubscribeFromMigration,
     subscribeToExport,
     unsubscribeFromExport,
-  };
+  }), [isConnected, subscribeToMigration, unsubscribeFromMigration, subscribeToExport, unsubscribeFromExport]);
 }

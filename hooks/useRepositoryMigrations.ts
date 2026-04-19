@@ -9,7 +9,7 @@ import {
   type RepoVisibility,
 } from "@/lib/api";
 import { parseCSV } from "@/lib/csvParser";
-import { useWebSocket } from "./useWebSocket";
+import { useWebSocket, type MigrationUpdate, type ExportUpdate, type RepositoryUpdate } from "./useWebSocket";
 
 export function useRepositoryMigrations() {
   const [repositories, setRepositories] = useState<RepositoryMigration[]>([]);
@@ -83,7 +83,7 @@ export function useRepositoryMigrations() {
 
   // WebSocket callbacks for real-time updates
   const webSocketCallbacks = useMemo(() => ({
-    onMigrationUpdate: (update: any) => {
+    onMigrationUpdate: (update: MigrationUpdate) => {
       console.log('Processing migration update:', update);
       setRepositories((currentRepositories) => {
         return currentRepositories.map((repo) => {
@@ -91,7 +91,7 @@ export function useRepositoryMigrations() {
             console.log(`Updating repo ${repo.repositoryName} state from ${repo.state} to ${update.state}`);
             return { 
               ...repo, 
-              state: update.state as any, 
+              state: update.state, 
               failureReason: update.failureReason || '' 
             };
           }
@@ -100,7 +100,7 @@ export function useRepositoryMigrations() {
       });
     },
 
-    onExportUpdate: (update: any) => {
+    onExportUpdate: (update: ExportUpdate) => {
       console.log('Processing export update:', update);
       setRepositories((currentRepositories) => {
         return currentRepositories.map((repo) => {
@@ -108,8 +108,8 @@ export function useRepositoryMigrations() {
             console.log(`Updating export states for repo ${repo.repositoryName}`);
             return {
               ...repo,
-              gitSourceExportState: update.gitSourceExportState as any || repo.gitSourceExportState,
-              metadataExportState: update.metadataExportState as any || repo.metadataExportState,
+              gitSourceExportState: update.gitSourceExportState || repo.gitSourceExportState,
+              metadataExportState: update.metadataExportState || repo.metadataExportState,
               gitSourceArchiveUrl: update.gitSourceArchiveUrl || repo.gitSourceArchiveUrl,
               metadataArchiveUrl: update.metadataArchiveUrl || repo.metadataArchiveUrl,
             };
@@ -119,7 +119,7 @@ export function useRepositoryMigrations() {
       });
     },
 
-    onRepositoryUpdate: (update: any) => {
+    onRepositoryUpdate: (update: RepositoryUpdate) => {
       console.log('Processing repository update:', update);
       syncRepository(update.repository);
     },
@@ -127,23 +127,67 @@ export function useRepositoryMigrations() {
 
   // Initialize WebSocket connection with callbacks
   const webSocket = useWebSocket(webSocketCallbacks);
+  
+  // Track subscribed IDs to avoid duplicate subscriptions
+  const subscribedMigrationIds = useRef(new Set<string>());
+  const subscribedExportIds = useRef(new Set<string>());
 
   // Subscribe to active migrations and exports when repositories change
   useEffect(() => {
+    const currentMigrationIds = new Set<string>();
+    const currentExportIds = new Set<string>();
+
+    // Collect IDs that should be subscribed
     repositories.forEach(repo => {
-      // Subscribe to migration updates for active migrations
+      // Collect migration IDs that should be subscribed
       if ((repo.state === 'in_progress' || repo.state === 'queued') && repo.repositoryMigrationId) {
-        webSocket.subscribeToMigration(repo.repositoryMigrationId);
+        currentMigrationIds.add(repo.repositoryMigrationId);
       }
 
-      // Subscribe to export updates for active exports (GHES mode)
+      // Collect export IDs that should be subscribed (GHES mode)
       if (isGHESMode) {
         const gitSourceInProgress = repo.gitSourceExportState === 'pending' || repo.gitSourceExportState === 'exporting';
         const metadataInProgress = repo.metadataExportState === 'pending' || repo.metadataExportState === 'exporting';
 
         if (gitSourceInProgress || metadataInProgress) {
-          webSocket.subscribeToExport(repo.id);
+          currentExportIds.add(repo.id);
         }
+      }
+    });
+
+    // Subscribe to new migrations
+    currentMigrationIds.forEach(migrationId => {
+      if (!subscribedMigrationIds.current.has(migrationId)) {
+        console.log('Subscribing to new migration:', migrationId);
+        webSocket.subscribeToMigration(migrationId);
+        subscribedMigrationIds.current.add(migrationId);
+      }
+    });
+
+    // Subscribe to new exports
+    currentExportIds.forEach(exportId => {
+      if (!subscribedExportIds.current.has(exportId)) {
+        console.log('Subscribing to new export:', exportId);
+        webSocket.subscribeToExport(exportId);
+        subscribedExportIds.current.add(exportId);
+      }
+    });
+
+    // Unsubscribe from removed migrations
+    subscribedMigrationIds.current.forEach(migrationId => {
+      if (!currentMigrationIds.has(migrationId)) {
+        console.log('Unsubscribing from migration:', migrationId);
+        webSocket.unsubscribeFromMigration(migrationId);
+        subscribedMigrationIds.current.delete(migrationId);
+      }
+    });
+
+    // Unsubscribe from removed exports
+    subscribedExportIds.current.forEach(exportId => {
+      if (!currentExportIds.has(exportId)) {
+        console.log('Unsubscribing from export:', exportId);
+        webSocket.unsubscribeFromExport(exportId);
+        subscribedExportIds.current.delete(exportId);
       }
     });
   }, [repositories, webSocket, isGHESMode]);

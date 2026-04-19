@@ -10,6 +10,10 @@ import { MigrationStatusGateway } from '../websocket/migration-status.gateway';
 @Injectable()
 export class PollingService implements OnModuleInit {
   private readonly logger = new Logger(PollingService.name);
+  
+  // Mutex flags to prevent overlapping polling cycles
+  private isMigrationPollingActive = false;
+  private isExportPollingActive = false;
 
   constructor(
     @InjectModel(RepositoryMigration.name)
@@ -30,6 +34,13 @@ export class PollingService implements OnModuleInit {
 
   @Cron('*/30 * * * * *') // Every 30 seconds
   async pollActiveMigrations() {
+    // Skip if previous cycle is still running
+    if (this.isMigrationPollingActive) {
+      this.logger.debug('Skipping migration polling cycle - previous cycle still in progress');
+      return;
+    }
+
+    this.isMigrationPollingActive = true;
     this.logger.debug('Starting migration status polling cycle');
     
     try {
@@ -47,11 +58,20 @@ export class PollingService implements OnModuleInit {
       }
     } catch (error) {
       this.logger.error('Error during migration polling cycle:', error);
+    } finally {
+      this.isMigrationPollingActive = false;
     }
   }
 
   @Cron('*/30 * * * * *') // Every 30 seconds  
   async pollActiveExports() {
+    // Skip if previous cycle is still running
+    if (this.isExportPollingActive) {
+      this.logger.debug('Skipping export polling cycle - previous cycle still in progress');
+      return;
+    }
+
+    this.isExportPollingActive = true;
     this.logger.debug('Starting export status polling cycle');
     
     try {
@@ -59,7 +79,7 @@ export class PollingService implements OnModuleInit {
       const activeExports = await this.repositoryMigrationModel.find({
         $and: [
           {
-            $or: [
+            $and: [
               { gitSourceExportId: { $exists: true, $ne: null } },
               { metadataExportId: { $exists: true, $ne: null } },
             ],
@@ -81,6 +101,8 @@ export class PollingService implements OnModuleInit {
       }
     } catch (error) {
       this.logger.error('Error during export polling cycle:', error);
+    } finally {
+      this.isExportPollingActive = false;
     }
   }
 
