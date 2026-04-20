@@ -5,56 +5,68 @@ export type RepositoryMigrationDocument = HydratedDocument<RepositoryMigration>;
 
 @Schema({ collection: 'repository_migrations', timestamps: true })
 export class RepositoryMigration {
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   repositoryName!: string;
 
-  @Prop({ required: true, trim: true })
+  @Prop({ type: String, required: true, trim: true })
   sourceRepositoryUrl!: string;
 
-  @Prop()
+  @Prop({ type: String })
   destinationOwnerId?: string;
 
-  @Prop()
+  @Prop({ type: String })
   migrationSourceId?: string;
 
-  @Prop()
+  @Prop({ type: String })
   repositoryMigrationId?: string;
 
-  @Prop()
+  @Prop({ type: String })
   state?: string;
 
-  @Prop()
+  @Prop({ type: String })
   failureReason?: string;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   lockSource!: boolean;
 
-  @Prop({ default: 'private' })
+  @Prop({ type: String, default: 'private' })
   repositoryVisibility!: string;
 
-  @Prop({ default: false })
+  @Prop({ type: Boolean, default: false })
   archived!: boolean;
 
-  @Prop()
+  @Prop({ type: String })
   gitSourceExportId?: string;
 
-  @Prop()
+  @Prop({ type: String })
   metadataExportId?: string;
 
-  @Prop()
+  @Prop({ type: String })
   gitSourceExportState?: string;
 
-  @Prop()
+  @Prop({ type: String })
   metadataExportState?: string;
 
-  @Prop()
+  @Prop({ type: String })
   gitSourceArchiveUrl?: string;
 
-  @Prop()
+  @Prop({ type: String })
   metadataArchiveUrl?: string;
 
-  @Prop()
+  @Prop({ type: String })
   exportFailureReason?: string;
+
+  @Prop({ type: Boolean, default: false })
+  exportPolling?: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  migrationPolling?: boolean;
+
+  @Prop({ type: Date })
+  lastPolledAt?: Date;
+
+  @Prop({ type: String })
+  lastKnownState?: string;
 }
 
 export const RepositoryMigrationSchema = SchemaFactory.createForClass(RepositoryMigration);

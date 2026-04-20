@@ -148,4 +148,18 @@ describe('canResetRepository', () => {
       metadataExportState: 'pending',
     }), true)).toBe(false);
   });
+  it('returns true in GHES when exports have failed and state is pending', () => {
+    expect(canResetRepository(makeRepo({
+      state: 'pending',
+      gitSourceExportState: 'failed',
+      metadataExportState: 'exported',
+    }), true)).toBe(true);
+  });
+  it('returns true in GHES when both exports have failed and state is pending', () => {
+    expect(canResetRepository(makeRepo({
+      state: 'pending',
+      gitSourceExportState: 'failed',
+      metadataExportState: 'failed',
+    }), true)).toBe(true);
+  });
 });

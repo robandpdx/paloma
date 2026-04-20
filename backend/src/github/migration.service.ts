@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { GitHubBaseService } from './github-base.service';
 import {
@@ -11,9 +13,17 @@ import {
   StartRepositoryMigrationData,
 } from './github.types';
 import { StartMigrationDto } from './github.dto';
+import { RepositoryMigrationsService } from '../repository-migrations/repository-migrations.service';
+import { EnvironmentService } from '../config/environment.service';
 
 @Injectable()
 export class MigrationService extends GitHubBaseService {
+  constructor(
+    environment: EnvironmentService,
+    private readonly repositoryMigrationsService: RepositoryMigrationsService,
+  ) {
+    super(environment);
+  }
   async getOwnerId() {
     const organization = this.requireTargetOrganization();
     const targetToken = this.requireTargetAdminToken();
@@ -53,15 +63,62 @@ export class MigrationService extends GitHubBaseService {
       targetToken,
     );
 
+    // Create or update database record for polling service to track
+    const migrationId = migration.startRepositoryMigration.repositoryMigration.id;
+    
+    // Try to find existing migration record for this repository
+    const existingMigration = await this.repositoryMigrationsService.findBySourceAndName(
+      payload.sourceRepositoryUrl, 
+      payload.repositoryName, 
+      true // Include archived
+    );
+
+    let dbRecord;
+    if (existingMigration) {
+      // Update existing record with new migration details
+      dbRecord = await this.repositoryMigrationsService.update(existingMigration.id, {
+        destinationOwnerId: ownerId,
+        migrationSourceId: migrationSourceId,
+        repositoryMigrationId: migrationId,
+        state: 'queued', // Reset state for new migration
+        lockSource: payload.lockSource || false,
+        repositoryVisibility: payload.targetRepoVisibility || 'private',
+        gitSourceExportId: payload.gitSourceArchiveUrl ? 'manual' : undefined,
+        metadataExportId: payload.metadataArchiveUrl ? 'manual' : undefined,
+        gitSourceArchiveUrl: payload.gitSourceArchiveUrl,
+        metadataArchiveUrl: payload.metadataArchiveUrl,
+        failureReason: undefined, // Clear any previous failure reason
+        migrationPolling: true, // Enable migration polling specifically
+        archived: false, // Unarchive if it was archived
+      });
+    } else {
+      // Create new record
+      dbRecord = await this.repositoryMigrationsService.create({
+        repositoryName: payload.repositoryName,
+        sourceRepositoryUrl: payload.sourceRepositoryUrl,
+        destinationOwnerId: ownerId,
+        migrationSourceId: migrationSourceId,
+        repositoryMigrationId: migrationId,
+        state: 'queued', // Set initial state for polling
+        lockSource: payload.lockSource || false,
+        repositoryVisibility: payload.targetRepoVisibility || 'private',
+        gitSourceExportId: payload.gitSourceArchiveUrl ? 'manual' : undefined,
+        metadataExportId: payload.metadataArchiveUrl ? 'manual' : undefined,
+        gitSourceArchiveUrl: payload.gitSourceArchiveUrl,
+        metadataArchiveUrl: payload.metadataArchiveUrl,
+      });
+    }
+
     return {
       success: true,
       message: 'Repository migration started successfully',
-      migrationId: migration.startRepositoryMigration.repositoryMigration.id,
+      migrationId,
       sourceUrl: migration.startRepositoryMigration.repositoryMigration.sourceUrl,
       migrationSourceId: migration.startRepositoryMigration.repositoryMigration.migrationSource.id,
       ownerId,
       repositoryName: payload.repositoryName,
       sourceRepositoryUrl: payload.sourceRepositoryUrl,
+      databaseId: dbRecord.id,
     };
   }
 
@@ -110,21 +167,36 @@ export class MigrationService extends GitHubBaseService {
   async deleteTargetRepository(repositoryName: string) {
     const organization = this.requireTargetOrganization();
     const targetToken = this.requireTargetAdminToken();
-    const url = `${this.getGitHubApiBase()}/repos/${organization}/${repositoryName}`;
+    // Target repos are always on github.com, even in GHES mode
+    // (migrations go from GHES to github.com)
+    const url = `https://api.github.com/repos/${organization}/${repositoryName}`;
 
     const response = await fetch(url, {
       method: 'DELETE',
       headers: this.buildRestHeaders(targetToken),
     });
 
-    if (response.status !== 204) {
-      const errorText = await response.text();
-      throw new InternalServerErrorException(
-        `Failed to delete repository: ${response.status} ${response.statusText} - ${errorText}`,
-      );
+    if (response.status === 204) {
+      return { success: true, message: 'Repository deleted successfully', repositoryName, organization };
     }
 
-    return { success: true, message: 'Repository deleted successfully', repositoryName, organization };
+    const errorText = await response.text();
+
+    switch (response.status) {
+      case 404:
+        throw new NotFoundException(
+          `Repository ${repositoryName} not found in organization ${organization}`,
+        );
+      case 401:
+      case 403:
+        throw new ForbiddenException(
+          `Insufficient permissions to delete repository ${repositoryName}: ${errorText}`,
+        );
+      default:
+        throw new InternalServerErrorException(
+          `Failed to delete repository: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+    }
   }
 
   private async getOwnerIdForOrg(organizationLogin: string, token: string): Promise<string> {

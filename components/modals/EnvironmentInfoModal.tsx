@@ -4,9 +4,10 @@ export interface EnvironmentInfoModalProps {
   targetDescription: string;
   targetOrganization: string;
   mode: string;
+  isWebSocketConnected: boolean;
 }
 
-export default function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, targetOrganization, mode }: EnvironmentInfoModalProps) {
+export default function EnvironmentInfoModal({ onClose, sourceDescription, targetDescription, targetOrganization, mode, isWebSocketConnected }: EnvironmentInfoModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -27,6 +28,18 @@ export default function EnvironmentInfoModal({ onClose, sourceDescription, targe
             
             <div className="info-label">Mode:</div>
             <div className="info-value">{mode}</div>
+            
+            <div className="info-label">Real-time Updates:</div>
+            <div className="info-value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ 
+                display: 'inline-block', 
+                width: '8px', 
+                height: '8px', 
+                borderRadius: '50%', 
+                backgroundColor: isWebSocketConnected ? '#28a745' : '#dc3545' 
+              }}></span>
+              {isWebSocketConnected ? 'Connected' : 'Disconnected'}
+            </div>
           </div>
         </div>
       </div>

@@ -14,6 +14,7 @@ export const EXPORT_STATES = [
   'exporting',
   'exported',
   'failed',
+  '', // Allow empty string to represent cleared/reset state
 ] as const;
 
 export type ExportState = (typeof EXPORT_STATES)[number];
@@ -41,6 +42,9 @@ export interface RepositoryMigration {
   gitSourceArchiveUrl?: string;
   metadataArchiveUrl?: string;
   exportFailureReason?: string;
+  isPolling?: boolean; // Legacy field - being replaced by separate fields below
+  exportPolling?: boolean;
+  migrationPolling?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -109,8 +113,21 @@ async function loadClientRuntimeConfig(): Promise<RuntimeConfig> {
 
 export async function getRuntimeConfig(): Promise<RuntimeConfig> {
   if (typeof window === "undefined") {
+    // Server-side: Use SERVER_API_BASE_URL if available (for Docker), otherwise add /api to NEXT_PUBLIC_API_BASE_URL
+    const serverApiUrl = process.env.SERVER_API_BASE_URL;
+    const publicApiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    
+    let apiBaseUrl: string;
+    if (serverApiUrl) {
+      apiBaseUrl = serverApiUrl;
+    } else if (publicApiUrl) {
+      apiBaseUrl = publicApiUrl.endsWith('/api') ? publicApiUrl : `${publicApiUrl}/api`;
+    } else {
+      apiBaseUrl = DEFAULT_RUNTIME_CONFIG.apiBaseUrl;
+    }
+    
     return {
-      apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || DEFAULT_RUNTIME_CONFIG.apiBaseUrl,
+      apiBaseUrl,
       targetOrganization: process.env.TARGET_ORGANIZATION || "",
       targetDescription: process.env.TARGET_DESCRIPTION || "",
       sourceDescription: process.env.SOURCE_DESCRIPTION || "",

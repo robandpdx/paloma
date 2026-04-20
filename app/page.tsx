@@ -37,6 +37,7 @@ export default function App() {
     isGHESMode,
     errorMessage,
     dismissError,
+    isWebSocketConnected,
 
     addRepository,
     deleteRepository,
@@ -673,6 +674,7 @@ export default function App() {
           targetDescription={targetDescription}
           targetOrganization={targetOrganization}
           mode={mode}
+          isWebSocketConnected={isWebSocketConnected}
         />
       )}
     </div>
