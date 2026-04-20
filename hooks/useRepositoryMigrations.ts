@@ -267,7 +267,10 @@ export function useRepositoryMigrations() {
 
   const resetRepository = useCallback(async (repo: RepositoryMigration, resetExport: boolean = false) => {
     try {
-      if (repo.repositoryName) {
+      // Only attempt to delete target repository if migration was actually started
+      // (repositoryMigrationId exists). If export failed before migration started,
+      // there's no target repository to delete.
+      if (repo.repositoryMigrationId && repo.repositoryName) {
         await apiClient.deleteTargetRepo(repo.repositoryName);
       }
 
@@ -299,8 +302,8 @@ export function useRepositoryMigrations() {
       if (resetExport) {
         updateFields.gitSourceExportId = '';
         updateFields.metadataExportId = '';
-        updateFields.gitSourceExportState = undefined;
-        updateFields.metadataExportState = undefined;
+        updateFields.gitSourceExportState = ''; // Clear export state - empty string represents reset state
+        updateFields.metadataExportState = ''; // Clear export state - empty string represents reset state
         updateFields.gitSourceArchiveUrl = '';
         updateFields.metadataArchiveUrl = '';
         updateFields.exportFailureReason = '';
@@ -424,6 +427,7 @@ export function useRepositoryMigrations() {
           gitSourceExportState: result.gitSourceExportState as 'pending' | 'exporting' | 'exported' | 'failed',
           metadataExportState: result.metadataExportState as 'pending' | 'exporting' | 'exported' | 'failed',
           exportFailureReason: '',
+          exportPolling: true, // Enable export polling specifically
         });
         syncRepository(updatedRepository);
         

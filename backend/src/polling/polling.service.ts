@@ -25,6 +25,7 @@ export class PollingService implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log('PollingService initialized - starting initial polling check...');
+    
     // Start polling immediately for any existing active migrations/exports
     setTimeout(() => {
       this.pollActiveMigrations();
@@ -48,7 +49,7 @@ export class PollingService implements OnModuleInit {
       const activeMigrations = await this.repositoryMigrationModel.find({
         repositoryMigrationId: { $exists: true, $ne: null },
         state: { $in: ['queued', 'in_progress'] },
-        isPolling: { $ne: false }, // Poll unless explicitly disabled
+        migrationPolling: { $ne: false }, // Poll unless explicitly disabled
       });
 
       this.logger.debug(`Found ${activeMigrations.length} active migrations to poll`);
@@ -90,7 +91,7 @@ export class PollingService implements OnModuleInit {
               { metadataExportState: { $in: ['pending', 'exporting'] } },
             ],
           },
-          { isPolling: { $ne: false } }, // Poll unless explicitly disabled
+          { exportPolling: { $ne: false } }, // Poll unless explicitly disabled
         ],
       });
 
@@ -121,13 +122,13 @@ export class PollingService implements OnModuleInit {
         if (migration.lastKnownState !== normalizedState) {
           this.logger.log(`Migration ${migrationId} state changed: ${migration.lastKnownState} -> ${normalizedState}`);
           
-          // Update database
+          // Update database - only update migration-specific fields
           await this.repositoryMigrationModel.findByIdAndUpdate(migration._id, {
             state: normalizedState,
             failureReason: statusResponse.failureReason || '',
             lastKnownState: normalizedState,
             lastPolledAt: new Date(),
-            isPolling: !['completed', 'failed'].includes(normalizedState),
+            migrationPolling: !['completed', 'failed'].includes(normalizedState), // Only control migration polling
           });
 
           // Notify WebSocket clients
@@ -173,14 +174,14 @@ export class PollingService implements OnModuleInit {
         if (gitChanged || metadataChanged) {
           this.logger.log(`Export states changed for repo ${migration._id}: git: ${gitState}, metadata: ${metadataState}`);
           
-          // Update database
+          // Update database - only update export-specific fields
           await this.repositoryMigrationModel.findByIdAndUpdate(migration._id, {
             gitSourceExportState: gitState,
             metadataExportState: metadataState,
             gitSourceArchiveUrl: gitResponse.archiveUrl || migration.gitSourceArchiveUrl,
             metadataArchiveUrl: metadataResponse.archiveUrl || migration.metadataArchiveUrl,
             lastPolledAt: new Date(),
-            isPolling: !(
+            exportPolling: !(
               ['exported', 'failed'].includes(gitState) && 
               ['exported', 'failed'].includes(metadataState)
             ),
@@ -213,26 +214,34 @@ export class PollingService implements OnModuleInit {
   // Method to start polling for a specific migration
   async startPollingMigration(repoId: string) {
     await this.repositoryMigrationModel.findByIdAndUpdate(repoId, {
-      isPolling: true,
+      migrationPolling: true,
       lastPolledAt: new Date(),
     });
-    this.logger.log(`Started polling for migration ${repoId}`);
+    this.logger.log(`Started migration polling for ${repoId}`);
   }
 
   // Method to start polling for a specific export
   async startPollingExport(repoId: string) {
     await this.repositoryMigrationModel.findByIdAndUpdate(repoId, {
-      isPolling: true,
+      exportPolling: true,
       lastPolledAt: new Date(),
     });
-    this.logger.log(`Started polling for export ${repoId}`);
+    this.logger.log(`Started export polling for ${repoId}`);
   }
 
-  // Method to stop polling for a repository
-  async stopPolling(repoId: string) {
+  // Method to stop migration polling for a repository
+  async stopPollingMigration(repoId: string) {
     await this.repositoryMigrationModel.findByIdAndUpdate(repoId, {
-      isPolling: false,
+      migrationPolling: false,
     });
-    this.logger.log(`Stopped polling for repository ${repoId}`);
+    this.logger.log(`Stopped migration polling for ${repoId}`);
+  }
+
+  // Method to stop export polling for a repository
+  async stopPollingExport(repoId: string) {
+    await this.repositoryMigrationModel.findByIdAndUpdate(repoId, {
+      exportPolling: false,
+    });
+    this.logger.log(`Stopped export polling for ${repoId}`);
   }
 }

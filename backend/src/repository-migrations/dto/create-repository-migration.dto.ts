@@ -86,4 +86,14 @@ export class CreateRepositoryMigrationDto {
   @Type(() => Boolean)
   @IsBoolean()
   isPolling?: boolean;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  exportPolling?: boolean;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  migrationPolling?: boolean;
 }

@@ -56,8 +56,11 @@ export class RepositoryMigration {
   @Prop({ type: String })
   exportFailureReason?: string;
 
-  @Prop({ type: Boolean, default: true })
-  isPolling?: boolean;
+  @Prop({ type: Boolean, default: false })
+  exportPolling?: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  migrationPolling?: boolean;
 
   @Prop({ type: Date })
   lastPolledAt?: Date;

@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { GitHubBaseService } from './github-base.service';
 import {
@@ -86,7 +88,7 @@ export class MigrationService extends GitHubBaseService {
         gitSourceArchiveUrl: payload.gitSourceArchiveUrl,
         metadataArchiveUrl: payload.metadataArchiveUrl,
         failureReason: undefined, // Clear any previous failure reason
-        isPolling: true, // Ensure polling is enabled
+        migrationPolling: true, // Enable migration polling specifically
         archived: false, // Unarchive if it was archived
       });
     } else {
@@ -165,21 +167,36 @@ export class MigrationService extends GitHubBaseService {
   async deleteTargetRepository(repositoryName: string) {
     const organization = this.requireTargetOrganization();
     const targetToken = this.requireTargetAdminToken();
-    const url = `${this.getGitHubApiBase()}/repos/${organization}/${repositoryName}`;
+    // Target repos are always on github.com, even in GHES mode
+    // (migrations go from GHES to github.com)
+    const url = `https://api.github.com/repos/${organization}/${repositoryName}`;
 
     const response = await fetch(url, {
       method: 'DELETE',
       headers: this.buildRestHeaders(targetToken),
     });
 
-    if (response.status !== 204) {
-      const errorText = await response.text();
-      throw new InternalServerErrorException(
-        `Failed to delete repository: ${response.status} ${response.statusText} - ${errorText}`,
-      );
+    if (response.status === 204) {
+      return { success: true, message: 'Repository deleted successfully', repositoryName, organization };
     }
 
-    return { success: true, message: 'Repository deleted successfully', repositoryName, organization };
+    const errorText = await response.text();
+
+    switch (response.status) {
+      case 404:
+        throw new NotFoundException(
+          `Repository ${repositoryName} not found in organization ${organization}`,
+        );
+      case 401:
+      case 403:
+        throw new ForbiddenException(
+          `Insufficient permissions to delete repository ${repositoryName}: ${errorText}`,
+        );
+      default:
+        throw new InternalServerErrorException(
+          `Failed to delete repository: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+    }
   }
 
   private async getOwnerIdForOrg(organizationLogin: string, token: string): Promise<string> {

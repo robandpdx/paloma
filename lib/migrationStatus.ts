@@ -192,13 +192,18 @@ export function canResetRepository(repo: RepositoryMigration, isGHESMode: boolea
   const state = repo.state ?? 'pending';
 
   if (state === 'reset') {
-    return repo.gitSourceExportState === 'exported' &&
+    const exportsCompleted = repo.gitSourceExportState === 'exported' &&
       repo.metadataExportState === 'exported';
+    const exportsFailed = repo.gitSourceExportState === 'failed' ||
+      repo.metadataExportState === 'failed';
+    return exportsCompleted || exportsFailed;
   }
 
   if (state === 'pending') {
     const exportsCompleted = repo.gitSourceExportState === 'exported' &&
       repo.metadataExportState === 'exported';
+    const exportsFailed = repo.gitSourceExportState === 'failed' ||
+      repo.metadataExportState === 'failed';
     const exportsInProgress =
       !repo.gitSourceExportState ||
       !repo.metadataExportState ||
@@ -207,7 +212,8 @@ export function canResetRepository(repo: RepositoryMigration, isGHESMode: boolea
       repo.gitSourceExportState === 'exporting' ||
       repo.metadataExportState === 'exporting';
 
-    return !exportsInProgress && exportsCompleted;
+    // Allow reset if exports are completed OR if any export has failed
+    return !exportsInProgress && (exportsCompleted || exportsFailed);
   }
 
   return true;

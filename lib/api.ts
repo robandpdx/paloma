@@ -14,6 +14,7 @@ export const EXPORT_STATES = [
   'exporting',
   'exported',
   'failed',
+  '', // Allow empty string to represent cleared/reset state
 ] as const;
 
 export type ExportState = (typeof EXPORT_STATES)[number];
@@ -41,6 +42,9 @@ export interface RepositoryMigration {
   gitSourceArchiveUrl?: string;
   metadataArchiveUrl?: string;
   exportFailureReason?: string;
+  isPolling?: boolean; // Legacy field - being replaced by separate fields below
+  exportPolling?: boolean;
+  migrationPolling?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
